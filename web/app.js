@@ -13,12 +13,18 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 /* Lógica heredada del CLI                                             */
 /* ------------------------------------------------------------------ */
 const QUALITIES = ['best', '1080', '720', '480', '360'];
+/* Proveedores públicos (sin claves, con CORS). El estado cambia por días:
+ * se prueban en orden y se usa el primero que responda. */
 const PIPED_INSTANCES = [
+  'https://api.piped.private.coffee',
   'https://pipedapi.kavin.rocks',
   'https://pipedapi.tokhmi.xyz',
   'https://pipedapi.moomoo.me',
   'https://pipedapi.syncpundit.io',
   'https://api.piped.yt',
+];
+const INVIDIOUS_INSTANCES = [
+  'https://invidious.f5.si',
 ];
 
 function qualityCap(q) {
@@ -141,6 +147,9 @@ const btnPaste = $('#btnPaste');
 const btnPreview = $('#btnPreview');
 const btnPreviewText = $('#btnPreviewText');
 const alertBox = $('#alertBox');
+const netFallback = $('#netFallback');
+const cliCmd = $('#cliCmd');
+const btnCopyCli = $('#btnCopyCli');
 const kindHint = $('#kind-hint');
 const toastEl = $('#toast');
 
@@ -226,6 +235,20 @@ function showAlert(msg, ok = false) {
 function hideAlert() {
   alertBox.hidden = true;
   alertBox.textContent = '';
+  netFallback.hidden = true;
+}
+
+function cliCommandFor(pageUrl) {
+  const { quality, kind } = currentSelection();
+  const parts = ['python youtube-downloader.py', `"${pageUrl}"`];
+  if (kind === 'audio') parts.push('-a');
+  else if (quality !== 'best') parts.push('-q', quality);
+  return parts.join(' ');
+}
+
+function showNetFallback(pageUrl) {
+  cliCmd.textContent = cliCommandFor(pageUrl);
+  netFallback.hidden = false;
 }
 function setUrlError(msg) {
   if (!msg) { urlError.hidden = true; urlError.textContent = ''; urlInput.removeAttribute('aria-invalid'); return; }
@@ -235,9 +258,9 @@ function setUrlError(msg) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Resolución vía Piped (con failover)                                 */
+/* Resolución (Piped → Invidious, con failover)                          */
 /* ------------------------------------------------------------------ */
-async function fetchWithTimeout(url, ms = 14000, signal) {
+async function fetchWithTimeout(url, ms = 10000, signal) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort('timeout'), ms);
   const combined = signal
@@ -250,22 +273,104 @@ async function fetchWithTimeout(url, ms = 14000, signal) {
   }
 }
 
-async function resolveStreams(videoId) {
-  let lastError = null;
-  for (const base of PIPED_INSTANCES) {
-    try {
-      const res = await fetchWithTimeout(`${base}/streams/${videoId}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (data && (data.title || (data.videoStreams || []).length || (data.audioStreams || []).length)) {
-        return { data, instance: base };
-      }
-      throw new Error('Respuesta vacía');
-    } catch (e) {
-      lastError = e;
+function isNetErr(e) {
+  return e instanceof TypeError || /timeout|abort|network|fetch|load failed/i.test(e?.message || e?.name || '');
+}
+
+function parseHeight(s) {
+  const m = /(\d{3,5})\s*p/i.exec(s?.qualityLabel || s?.quality || '') || /x(\d{3,5})/.exec(s?.resolution || '');
+  return m ? parseInt(m[1], 10) : (s?.height || 0);
+}
+
+function codecFromType(t) {
+  const m = /codecs="([^"]+)"/.exec(t || '');
+  return m ? m[1].split(',')[0].trim() : '';
+}
+
+/** Normaliza /api/v1/videos de Invidious al mismo shape que Piped. */
+function normalizeInvidious(d) {
+  const thumbs = [...(d.videoThumbnails || [])].sort((a, b) => (b.width || 0) - (a.width || 0));
+  const videoStreams = [];
+  for (const s of d.formatStreams || []) {
+    videoStreams.push({
+      quality: s.qualityLabel || s.quality || 'SD',
+      height: parseHeight(s),
+      fps: s.fps || 30,
+      mimeType: (s.type || '').split(';')[0],
+      codec: codecFromType(s.type),
+      bitrate: 0,
+      url: s.url,
+      videoOnly: false,
+    });
+  }
+  for (const s of d.adaptiveFormats || []) {
+    const t = (s.type || '');
+    if (t.startsWith('video')) {
+      videoStreams.push({
+        quality: s.qualityLabel || 'HD',
+        height: parseHeight(s),
+        fps: s.fps || 30,
+        mimeType: t.split(';')[0],
+        codec: s.encoding || codecFromType(t),
+        bitrate: s.bitrate || 0,
+        url: s.url,
+        videoOnly: true,
+      });
     }
   }
-  throw lastError || new Error('Sin instancias disponibles');
+  const audioStreams = (d.adaptiveFormats || [])
+    .filter((s) => (s.type || '').startsWith('audio'))
+    .map((s) => ({
+      quality: s.qualityLabel || (s.bitrate ? `${Math.round(s.bitrate / 1000)} kbps` : 'audio'),
+      bitrate: s.bitrate || 0,
+      mimeType: (s.type || '').split(';')[0],
+      codec: s.encoding || codecFromType(s.type),
+      url: s.url,
+    }));
+  return {
+    title: d.title,
+    uploader: d.author,
+    views: d.viewCount,
+    duration: d.lengthSeconds,
+    thumbnailUrl: thumbs[0]?.url,
+    description: d.description,
+    uploadDate: d.published ? new Date(d.published * 1000).toLocaleDateString('es-ES') : '',
+    livestream: !!d.liveNow,
+    videoStreams,
+    audioStreams,
+  };
+}
+
+async function resolveStreams(videoId) {
+  let netFails = 0;
+  let lastError = null;
+  const attempt = async (url) => {
+    try {
+      const res = await fetchWithTimeout(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      if (isNetErr(e)) netFails += 1;
+      lastError = e;
+      return null;
+    }
+  };
+  for (const base of PIPED_INSTANCES) {
+    const data = await attempt(`${base}/streams/${videoId}`);
+    if (data && (data.title || (data.videoStreams || []).length || (data.audioStreams || []).length)) {
+      return { data, via: 'piped' };
+    }
+  }
+  for (const base of INVIDIOUS_INSTANCES) {
+    const raw = await attempt(`${base}/api/v1/videos/${videoId}`);
+    if (raw?.title || raw?.formatStreams?.length || raw?.adaptiveFormats?.length) {
+      const data = normalizeInvidious(raw);
+      if (data.videoStreams.length || data.audioStreams.length) return { data, via: 'invidious' };
+    }
+  }
+  const err = new Error(lastError?.message || 'Sin instancias disponibles');
+  err.providerDown = netFails > 0;
+  throw err;
 }
 
 async function previewOEmbed(pageUrl) {
@@ -357,8 +462,7 @@ async function doPreview(event) {
 
   try {
     const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    const { data, instance } = await resolveStreams(videoId);
-    void instance;
+    const { data } = await resolveStreams(videoId);
 
     if (data.livestream) throw new Error('Es un directo. Espera a que termine para descargarlo.');
     if (!data.videoStreams?.length && !data.audioStreams?.length) throw new Error('No se encontraron streams descargables para este video.');
@@ -406,7 +510,12 @@ async function doPreview(event) {
         previewCard.hidden = false;
       }
     } catch { /* noop */ }
-    showAlert(`No se pudo resolver ese video (${e.message || e}). Puede ser privado, con restricción de edad o un fallo temporal. Reintenta o usa el CLI.`);
+    if (e?.providerDown) {
+      showAlert('Los resolvedores públicos están caídos ahora mismo (les pasa a menudo: son instancias gratuitas). Tu video existe; es la red la que falla. Alternativas de 1 clic abajo.');
+      showNetFallback(`https://www.youtube.com/watch?v=${videoId}`);
+    } else {
+      showAlert(`No se pudo resolver ese video (${e.message || e}). Puede ser privado, con restricción de edad o un fallo temporal. Reintenta o usa el CLI.`);
+    }
   } finally {
     btnPreview.disabled = false;
     btnPreviewText.textContent = 'Previsualizar';
@@ -539,6 +648,14 @@ btnPaste.addEventListener('click', async () => {
 });
 form.querySelectorAll('input[name="quality"], input[name="kind"]').forEach((r) => {
   r.addEventListener('change', refreshKindHint);
+});
+btnCopyCli.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(cliCmd.textContent);
+    toast('Comando copiado ✓');
+  } catch {
+    toast('Copia el comando manualmente');
+  }
 });
 btnDownload.addEventListener('click', (e) => doDownload(e));
 btnCancel.addEventListener('click', () => {

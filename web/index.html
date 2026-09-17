@@ -21,6 +21,7 @@
   <meta name="twitter:description" content="Pega un link de YouTube, elige calidad y descarga. Sin servidor, sin anuncios." />
   <meta name="twitter:image" content="https://andyechc.github.io/youtube-downloader/assets/og.png" />
 
+  <link rel="icon" href="favicon.ico" sizes="any" />
   <link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
   <link rel="apple-touch-icon" href="assets/icon-180.png" />
   <link rel="manifest" href="site.webmanifest" />
@@ -70,10 +71,6 @@
     <!-- HERO -->
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <p class="eyebrow">
-          <span class="spark">Sin servidor</span>
-          <span>Pega · elige · descarga</span>
-        </p>
         <h1 id="hero-title">Pega un link.<br /><span class="grad">Descarga en tu navegador.</span></h1>
         <p class="lead">Sin cuentas, sin anuncios, sin subir nada a ningún servidor. La web resuelve el video en tu propio navegador y lo guarda en tu carpeta <strong>Descargas</strong>.</p>
         <ul class="hero-points">
@@ -90,10 +87,6 @@
             Progreso real · cancela cuando quieras
           </li>
         </ul>
-        <div class="hero-cta">
-          <a class="btn primary large" href="#form-card">Empezar ahora</a>
-          <a class="btn ghost large" href="#web-vs-cli">¿Necesitas MP3 o 4K?</a>
-        </div>
       </div>
       <div class="hero-art" aria-hidden="true">
         <div class="art-glow"></div>
@@ -200,6 +193,14 @@
         </div>
 
         <div class="alert" id="alertBox" role="status" hidden></div>
+        <div class="net-fallback" id="netFallback" hidden>
+          <p><strong>Sin espera:</strong> el CLI descarga este mismo video ahora mismo.</p>
+          <div class="net-actions">
+            <code id="cliCmd"></code>
+            <button class="btn tiny secondary" id="btnCopyCli" type="button">Copiar comando</button>
+            <a class="btn tiny primary" href="https://github.com/andyechc/youtube-downloader/releases" target="_blank" rel="noopener">Ir a Releases</a>
+          </div>
+        </div>
       </form>
     </section>
 
@@ -326,7 +327,7 @@
     </section>
 
     <footer class="footer">
-      <span>Hecho para uso personal · Respeta los derechos de cada video y los términos de YouTube.</span>
+      <span>Hecho por <a href="https://github.com/andyechc" target="_blank" rel="noopener">andyechc</a> · Respeta los derechos de cada video y los términos de YouTube.</span>
       <span class="footer-links">
         <a href="https://github.com/andyechc/youtube-downloader" target="_blank" rel="noopener">Código</a> ·
         <a href="https://github.com/andyechc/youtube-downloader/releases" target="_blank" rel="noopener">CLI</a> ·
