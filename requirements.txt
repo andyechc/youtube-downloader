@@ -1,1 +1,3 @@
-yt-dlp>=2025.6.9
+# Único requisito runtime: todo lo demás es stdlib (http.server, threading, …).
+# El suelo garantiza js_runtimes + remote_components (EJS), que usa base_opts().
+yt-dlp>=2026.8.19

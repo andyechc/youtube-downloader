@@ -37,7 +37,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install "pyinstaller>=6.0"
 
       - name: Humo — importa el CLI
         run: python -c "import ast; ast.parse(open('youtube-downloader.py', encoding='utf-8').read()); print('CLI OK')"
