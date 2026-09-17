@@ -75,18 +75,19 @@ jobs:
       - name: Empaquetar (binarios + script portable)
         run: |
           ls -R dist
-          find dist -mindepth 2 -type f -exec mv {} dist/ \;
-          cp youtube-downloader.py requirements.txt dist/
-          ls -la dist
+          mkdir -p out
+          find dist -mindepth 2 -type f -exec mv -t out/ {} +
+          cp youtube-downloader.py requirements.txt out/
+          ls -la out
 
       - name: Crear Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/youtube-downloader-linux
-            dist/youtube-downloader-macos
-            dist/youtube-downloader-windows.exe
-            dist/youtube-downloader.py
+            out/youtube-downloader-linux
+            out/youtube-downloader-macos
+            out/youtube-downloader-windows.exe
+            out/youtube-downloader.py
           generate_release_notes: true
           body: |
             ## YT Downloader ${{ github.ref_name }}
