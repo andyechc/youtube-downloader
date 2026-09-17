@@ -399,6 +399,22 @@ def download_worker(job_id: str):
         with yt_dlp.YoutubeDL(opts) as ydl:
             # need to handle cancellation
             ydl.download([url])
+            if not tracked_files:
+                # yt-dlp omite la descarga si el destino ya existe ("has already
+                # been downloaded"). Como el host no debe almacenar nada, ese
+                # existente se reutiliza como resultado (se sirve y se borra).
+                try:
+                    info = ydl.extract_info(url, download=False)
+                except Exception:
+                    info = None
+                if info and info.get("_type") != "playlist":
+                    base = Path(ydl.prepare_filename(info))
+                    media = (".mp4", ".mkv", ".webm", ".mp3", ".m4a", ".opus", ".wav")
+                    for p in out_dir.iterdir():
+                        if p.is_file() and p.stem == base.stem and p.suffix.lower() in media:
+                            tracked_files.append(str(p))
+                            log.info("job %s reutiliza existente: %s", job_id, p)
+                            break
         # After download, enumerate new files
         files = []
         last_file: str | None = None

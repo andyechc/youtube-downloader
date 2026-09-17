@@ -831,7 +831,12 @@ async function pollServerJob() {
       clearInterval(pollTimer);
       btnDownload.disabled = false;
       if (job.status === 'done') {
-        // El servidor guarda en disco Y el navegador descarga el archivo
+        if (!job.files || !job.files.length) {
+          progressLabel.textContent = 'Error';
+          progEta.textContent = 'sin archivos';
+          showAlert('Terminó sin archivos que entregar (el destino ya existía o falló el merge). Borra duplicados en tu carpeta y reintenta.');
+          return;
+        }
         setProgress(100, job.total_bytes || job.downloaded_bytes || 0, job.total_bytes || job.downloaded_bytes || null, 0, 0);
         progressLabel.textContent = 'Completado';
         progEta.textContent = '¡listo!';
