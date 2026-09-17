@@ -40,7 +40,7 @@ jobs:
           pip install pyinstaller
 
       - name: Humo — importa el CLI
-        run: python -c "import ast; ast.parse(open('youtube-downloader.py').read()); print('CLI OK')"
+        run: python -c "import ast; ast.parse(open('youtube-downloader.py', encoding='utf-8').read()); print('CLI OK')"
 
       - name: Compilar binario
         run: >
