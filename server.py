@@ -29,7 +29,8 @@ except ImportError:
 # ---------------------------------------------------------------------------
 ROOT = Path(__file__).parent
 WEB_DIR = ROOT / "web"
-DEFAULT_DIR = Path.home() / "Downloads" / "YT"
+# Carpeta de descargas: configurable vía YT_OUT_DIR (útil en Docker).
+DEFAULT_DIR = Path(os.environ.get("YT_OUT_DIR") or (Path.home() / "Downloads" / "YT"))
 QUALITIES = ["best", "1080", "720", "480", "360"]
 SEARCH_PER_PAGE = 20
 

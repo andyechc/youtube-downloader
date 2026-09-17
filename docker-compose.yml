@@ -1,0 +1,19 @@
+services:
+  yt-downloader:
+    build: .
+    image: yt-downloader:latest
+    container_name: yt-downloader
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      YT_OUT_DIR: /downloads
+    volumes:
+      # Tus descargas quedan en ./downloads (persistente)
+      - ./downloads:/downloads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
