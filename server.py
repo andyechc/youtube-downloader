@@ -8,6 +8,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -74,9 +75,26 @@ WEB_DIR = ROOT / "web"
 DEFAULT_DIR = Path.home() / "Downloads" / "YT"
 QUALITIES = ["best", "1080", "720", "480", "360"]
 SEARCH_PER_PAGE = 20
+# Tope de jobs en memoria: al superarlo se expulsan los TERMINADOS más viejos
+# (nunca los activos). Evita fuga de RAM en sesiones largas.
+MAX_JOBS = 100
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 jobs: dict[str, dict] = {}
 jobs_lock = threading.Lock()
+
+
+def evict_old_jobs() -> None:
+    """Expulsa jobs terminales viejos hasta MAX_JOBS. Llamar CON jobs_lock."""
+    if len(jobs) <= MAX_JOBS:
+        return
+    terminal = [j for j in jobs.values() if j.get("status") in ("done", "error", "cancelled")]
+    terminal.sort(key=lambda j: j.get("finished_at") or j.get("created_at") or 0)
+    for j in terminal:
+        if len(jobs) <= MAX_JOBS:
+            break
+        jobs.pop(j["id"], None)
+        log.debug("job %s expulsado de memoria (tope %d)", j["id"], MAX_JOBS)
 
 # ---------------------------------------------------------------------------
 # Helpers copiados de youtube-downloader.py (sin dependencia circular)
@@ -352,11 +370,11 @@ def download_worker(job_id: str):
                 if total:
                     j["progress"] = min(99, round(downloaded / total * 100, 1))
                 else:
-                    # fallback to percent string
-                    pct = d.get("_percent_str") or ""
+                    # fallback to percent string (yt-dlp puede traer códigos ANSI)
+                    pct = _ANSI_RE.sub("", d.get("_percent_str") or "")
                     try:
-                        j["progress"] = float(pct.strip().replace("%","")) if pct else j["progress"]
-                    except: pass
+                        j["progress"] = float(pct.strip().replace("%","")) if pct.strip().strip("%") else j["progress"]
+                    except (ValueError, AttributeError): pass
                 j["speed"] = d.get("_speed_str") or ""
                 j["eta"] = d.get("_eta_str") or ""
                 # also store raw
@@ -377,6 +395,7 @@ def download_worker(job_id: str):
             ydl.download([url])
         # After download, enumerate new files
         files = []
+        last_file: str | None = None
         for f in tracked_files:
             # audio conversion changes extension to mp3
             p = Path(f)
@@ -387,7 +406,7 @@ def download_worker(job_id: str):
                     p = mp3_guess
             if p.exists():
                 files.append(str(p))
-                job["current_filename"] = str(p)
+                last_file = str(p)
         # fallback: list dir by recent mtime if hook missed
         if not files:
             # list newest files in out_dir modified within last 5 minutes
@@ -405,6 +424,8 @@ def download_worker(job_id: str):
                     j["status"] = "done"
                     j["progress"] = 100
                     j["files"] = files
+                    if last_file:
+                        j["current_filename"] = last_file
                     j["finished_at"] = time.time()
                     # try to get title from first file
                     if files:
@@ -505,11 +526,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"jobs": lst})
         if path == "/api/progress":
             job_id = qs.get("jobId", qs.get("id", [None]))[0]
-            if not job_id or job_id not in jobs:
-                return self.send_json({"error": "job no encontrado"}, status=404)
             with jobs_lock:
-                j = jobs[job_id].copy()
-            return self.send_json(j)
+                j = jobs.get(job_id) if job_id else None
+                job = j.copy() if j else None
+            if not job:
+                return self.send_json({"error": "job no encontrado"}, status=404)
+            return self.send_json(job)
         if path.startswith("/api/file/"):
             job_id = path[len("/api/file/"):]
             with jobs_lock:
@@ -525,6 +547,14 @@ class Handler(BaseHTTPRequestHandler):
             if idx < 0 or idx >= len(files):
                 return self.send_json({"error": "indice fuera de rango"}, status=404)
             fpath = Path(files[idx])
+            # Anti path-traversal: el archivo debe vivir dentro del out_dir
+            # del propio job (nada de /etc/passwd aunque j["files"] se manipule).
+            try:
+                out_root = Path(j.get("out_dir") or str(DEFAULT_DIR)).expanduser().resolve()
+                fpath.resolve().relative_to(out_root)
+            except (ValueError, OSError):
+                log.warning("traversal bloqueado en /api/file/%s", job_id)
+                return self.send_json({"error": "ruta no permitida"}, status=403)
             if not fpath.exists() or not fpath.is_file():
                 return self.send_json({"error": "archivo no encontrado en disco"}, status=404)
             # stream file
@@ -603,10 +633,15 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length) if length else b""
-        try:
-            body = json.loads(raw.decode("utf-8")) if raw else {}
-        except Exception:
+        if not raw:
             body = {}
+        else:
+            try:
+                body = json.loads(raw.decode("utf-8"))
+            except Exception:
+                return self.send_json({"error": "JSON inválido"}, status=400)
+            if not isinstance(body, dict):
+                return self.send_json({"error": "JSON inválido: se esperaba un objeto"}, status=400)
 
         if path == "/api/preview":
             url = (body.get("url") or "").strip()
@@ -685,6 +720,7 @@ class Handler(BaseHTTPRequestHandler):
             }
             with jobs_lock:
                 jobs[job_id] = job
+                evict_old_jobs()
             # start thread
             t = threading.Thread(target=download_worker, args=(job_id,), daemon=True)
             t.start()
