@@ -91,6 +91,19 @@ python youtube-downloader.py "URL" -q 1080
 | `-o, --output` | Carpeta destino (default: `~/Downloads/YT`) |
 | `-a, --audio` | Solo audio en MP3 320kbps |
 | `-q, --quality` | `best`, `1080`, `720`, `480`, `360` (default: `best`) |
+| `-c, --cookies` | Archivo de cookies Netscape para YouTube (default: auto con cookies del navegador) |
+
+### Cookies de YouTube (`--cookies`)
+
+```bash
+python youtube-downloader.py "URL" -c cookies-file.txt
+```
+
+1. Instala la extensión **Get cookies.txt LOCALLY** en tu navegador y expórtalas ([guía yt-dlp](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookie)).
+2. Guarda el archivo como `cookies-file.txt` junto al script (el modo guiado lo detecta solo; si no, te pide la ruta o usa las cookies del navegador automáticamente).
+3. Sirven para videos con restricción de edad/región o rachas de `Sign in to confirm` — para eso expórtalas **con sesión iniciada**.
+
+> `cookies-file.txt` está en `.gitignore`: contiene identificadores semi-privados, nunca lo commitees.
 
 ### Servidor local (modo pro, recomendado)
 

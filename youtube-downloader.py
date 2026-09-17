@@ -163,12 +163,20 @@ def resolve_quality(quality: str) -> str:
     return "bestvideo+bestaudio/best"
 
 
-def build_opts(url: str, out_dir: Path, quality: str, audio: bool) -> dict:
+def build_opts(url: str, out_dir: Path, quality: str, audio: bool, cookies: str | None = None) -> dict:
     opts = base_opts()
     opts["outtmpl"] = str(out_dir / "%(title)s [%(id)s].%(ext)s")
     opts["concurrent_fragment_downloads"] = 8
     opts["buffersize"] = 1024 * 16
     opts["socket_timeout"] = 30
+    if cookies:
+        # Archivo Netscape exportado del navegador (ver README: --cookies).
+        # Tiene prioridad sobre cookiesfrombrowser de base_opts().
+        cpath = Path(cookies).expanduser()
+        if not cpath.is_file():
+            raise FileNotFoundError(f"No existe el archivo de cookies: {cpath}")
+        opts.pop("cookiesfrombrowser", None)
+        opts["cookiefile"] = str(cpath)
     if audio:
         opts.update(
             {
@@ -282,11 +290,31 @@ def ask_url() -> str:
         print("[!] El enlace no puede estar vacío.")
 
 
-def fetch_preview(url: str, quality: str, audio: bool) -> dict:
+def fetch_preview(url: str, quality: str, audio: bool, cookies: str | None = None) -> dict:
     opts = base_opts()
     opts["outtmpl"] = str(Path.home() / ".yt_preview" / "%(id)s.%(ext)s")
+    if cookies:
+        cpath = Path(cookies).expanduser()
+        if not cpath.is_file():
+            raise FileNotFoundError(f"No existe el archivo de cookies: {cpath}")
+        opts.pop("cookiesfrombrowser", None)
+        opts["cookiefile"] = str(cpath)
     with yt_dlp.YoutubeDL(opts) as ydl:
         return ydl.extract_info(url, download=False)
+
+
+def ask_cookies() -> str | None:
+    """Pide archivo de cookies (opcional). Default: auto (cookies del navegador)."""
+    default = "cookies-file.txt" if Path("cookies-file.txt").is_file() else ""
+    hint = f" [default: {default}]" if default else " [Enter = auto]"
+    while True:
+        raw = input(f"Archivo de cookies Netscape{hint}: ").strip()
+        if not raw:
+            return default or None
+        p = Path(raw).expanduser()
+        if p.is_file():
+            return str(p)
+        print(f"[!] No existe: {p}. Prueba de nuevo o Enter para auto.")
 
 
 def render_preview(info: dict, quality: str, audio: bool) -> None:
@@ -320,9 +348,9 @@ def render_preview(info: dict, quality: str, audio: bool) -> None:
         print(f"  {paint('Tamaño  :', CYAN, bold=True)} {paint(fmt(info), GREEN, bold=True)}")
 
 
-def show_preview(url: str, quality: str, audio: bool) -> None:
+def show_preview(url: str, quality: str, audio: bool, cookies: str | None = None) -> None:
     print(paint("  Obteniendo información del video...", DIM))
-    info = fetch_preview(url, quality, audio)
+    info = fetch_preview(url, quality, audio, cookies)
     render_preview(info, quality, audio)
 
 
@@ -364,16 +392,20 @@ def guided_flow() -> int:
         out_dir = out_dir.expanduser()
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        show_preview(url, quality, audio)
+        cookies = ask_cookies()
+
+        show_preview(url, quality, audio, cookies)
 
         print(f"\n  {paint('Destino  :', CYAN, bold=True)} {out_dir}")
         quality_line = f"  {paint('Calidad  :', CYAN, bold=True)} {quality}"
         if audio:
             quality_line += paint("  (solo audio MP3)", YELLOW)
         print(quality_line)
+        if cookies:
+            print(f"  {paint('Cookies  :', CYAN, bold=True)} {cookies}")
         c_idx = arrow_menu("¿Descargar?", ["Sí, descargar", "No, cancelar"], default=0)
         if c_idx == 0:
-            download(url, out_dir, quality, audio)
+            download(url, out_dir, quality, audio, cookies)
 
         again = arrow_menu("¿Otra descarga?", ["Sí, descargar otro video", "No, salir"], default=0)
         if again != 0:
@@ -421,7 +453,7 @@ def cleanup_files(out_dir: Path, before: set[str], tracked: set[Path], delete_tr
                 pass
 
 
-def download(url: str, out_dir: Path, quality: str, audio: bool) -> int:
+def download(url: str, out_dir: Path, quality: str, audio: bool, cookies: str | None = None) -> int:
     before = {p.name for p in out_dir.iterdir()} if out_dir.exists() else set()
     tracked: set[Path] = set()
     cancelled = {"flag": False}
@@ -434,7 +466,7 @@ def download(url: str, out_dir: Path, quality: str, audio: bool) -> int:
             cancelled["flag"] = True
             raise yt_dlp.utils.DownloadCancelled()
 
-    opts = build_opts(url, out_dir, quality, audio)
+    opts = build_opts(url, out_dir, quality, audio, cookies)
     opts["progress_hooks"] = [hook]
 
     fd = sys.stdin.fileno()
@@ -490,13 +522,19 @@ def build_parser() -> argparse.ArgumentParser:
         "-q", "--quality", default="best",
         help="Calidad: best, 1080, 720, 480, 360 (default: best)",
     )
+    parser.add_argument(
+        "-c", "--cookies", default=None, metavar="ARCHIVO",
+        help="Archivo de cookies Netscape para YouTube (ej. cookies-file.txt, "
+             "exportado según https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookie). "
+             "Sin esto se usan las cookies del navegador si se encuentran.",
+    )
     return parser
 
 
 def cli_flow(args: argparse.Namespace) -> int:
     out_dir = Path(args.output).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
-    return download(args.url, out_dir, args.quality, args.audio)
+    return download(args.url, out_dir, args.quality, args.audio, args.cookies)
 
 
 def main() -> int:

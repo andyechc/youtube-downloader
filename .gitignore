@@ -12,6 +12,10 @@ venv/
 .YT/
 Downloads/
 
+# Cookies de YouTube (semi-privadas: NO commitear nunca)
+cookies*.txt
+*cookies*.txt
+
 # Servidor local
 server.log
 
