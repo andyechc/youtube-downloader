@@ -85,7 +85,8 @@ jobs_lock = threading.Lock()
 
 
 def evict_old_jobs() -> None:
-    """Expulsa jobs terminales viejos hasta MAX_JOBS. Llamar CON jobs_lock."""
+    """Expulsa jobs terminales viejos hasta MAX_JOBS (con sus archivos del
+    host: el servidor no almacena nada). Llamar CON jobs_lock."""
     if len(jobs) <= MAX_JOBS:
         return
     terminal = [j for j in jobs.values() if j.get("status") in ("done", "error", "cancelled")]
@@ -94,6 +95,11 @@ def evict_old_jobs() -> None:
         if len(jobs) <= MAX_JOBS:
             break
         jobs.pop(j["id"], None)
+        for s in j.get("files") or []:
+            try:
+                Path(s).unlink(missing_ok=True)
+            except OSError:
+                pass
         log.debug("job %s expulsado de memoria (tope %d)", j["id"], MAX_JOBS)
 
 # ---------------------------------------------------------------------------
@@ -536,7 +542,11 @@ class Handler(BaseHTTPRequestHandler):
             job_id = path[len("/api/file/"):]
             with jobs_lock:
                 j = jobs.get(job_id)
-            if not j or not j.get("files"):
+            if not j:
+                return self.send_json({"error": "archivo no disponible"}, status=404)
+            if not j.get("files"):
+                if j.get("delivered"):
+                    return self.send_json({"error": "archivo ya entregado y eliminado del servidor"}, status=410)
                 return self.send_json({"error": "archivo no disponible"}, status=404)
             # serve first file, or ?index=
             idx = 0
@@ -569,9 +579,32 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 with open(fpath, "rb") as f:
                     shutil.copyfileobj(f, self.wfile)
+            except (BrokenPipeError, ConnectionResetError):
+                # El navegador canceló a mitad del stream: no hay a quién
+                # responder (intentar send_json reventaría con otro BrokenPipe).
+                # Se conserva el archivo para reintentar con "Guardar de nuevo".
+                log.debug("cliente canceló /api/file/%s", job_id)
                 return
             except Exception as e:
-                return self.send_json({"error": str(e)}, status=500)
+                log.warning("/api/file/%s fallo: %s", job_id, e)
+                try:
+                    return self.send_json({"error": str(e)}, status=500)
+                except (BrokenPipeError, ConnectionResetError):
+                    return
+            # Entrega completa: el host no almacena nada (one-shot).
+            with jobs_lock:
+                jj = jobs.get(job_id)
+                served = list(jj.get("files") or []) if jj else []
+                if jj:
+                    jj["files"] = []
+                    jj["delivered"] = True
+            for s in served:
+                try:
+                    Path(s).unlink(missing_ok=True)
+                except OSError:
+                    pass
+            log.info("job %s entregado y borrado del host (%d archivo(s))", job_id, len(served))
+            return
         if path == "/api/list_files":
             # list files in downloads folder
             out_dir = DEFAULT_DIR
@@ -747,11 +780,18 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/api/jobs/"):
             job_id = parsed.path[len("/api/jobs/"):]
             with jobs_lock:
-                if job_id in jobs:
-                    del jobs[job_id]
-                    return self.send_json({"ok": True})
-                else:
-                    return self.send_json({"error": "no encontrado"}, status=404)
+                job = jobs.pop(job_id, None)
+                leftovers = list(job.get("files") or []) if job else []
+            if job is None:
+                return self.send_json({"error": "no encontrado"}, status=404)
+            for s in leftovers:
+                try:
+                    Path(s).unlink(missing_ok=True)
+                except OSError:
+                    pass
+            if leftovers:
+                log.info("job %s eliminado con %d archivo(s) del host", job_id, len(leftovers))
+            return self.send_json({"ok": True})
         return self.send_json({"error": "not found"}, status=404)
 
 class ThreadedServer(ThreadingMixIn, HTTPServer):

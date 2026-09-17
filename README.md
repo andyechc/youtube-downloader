@@ -100,6 +100,8 @@ python server.py --open   # http://127.0.0.1:8000
 
 La web detecta `/api/*` en el mismo origen y pasa a **modo local**: descargas con `yt-dlp` + `ffmpeg` en tu máquina (máxima calidad, MP3 320, playlists), y el navegador recibe el archivo igualmente.
 
+> El servidor **no almacena nada**: cada archivo se borra del host en cuanto el navegador lo recibe (entrega one-shot; si cancelas a mitad, se conserva para reintentar).
+
 ## 🧠 Cómo funciona la web
 
 ```text
