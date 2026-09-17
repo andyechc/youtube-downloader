@@ -484,10 +484,22 @@ def download_worker(job_id: str):
 # HTTP Handler
 # ---------------------------------------------------------------------------
 class Handler(BaseHTTPRequestHandler):
+    def client_ip(self) -> str:
+        # IP real cuando hay un proxy inverso delante (nginx la pone en
+        # X-Forwarded-For / X-Real-IP). Nota: sin proxy de confianza, un
+        # cliente directo podría forjarlas; aquí solo alimentan el log.
+        fwd = self.headers.get("X-Forwarded-For")
+        if fwd:
+            return fwd.split(",")[0].strip()
+        real = self.headers.get("X-Real-IP")
+        if real:
+            return real.strip()
+        return self.address_string()
+
     def log_message(self, format, *args):
         # El polling de /api/progress es ruidoso: va a DEBUG (archivo),
         # el resto de rutas también queda trazado sin ensuciar la consola.
-        log.debug("%s %s", self.address_string(), format % args)
+        log.debug("%s %s", self.client_ip(), format % args)
 
     def send_json(self, data, status=200, headers=None):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -773,7 +785,7 @@ class Handler(BaseHTTPRequestHandler):
             # start thread
             t = threading.Thread(target=download_worker, args=(job_id,), daemon=True)
             t.start()
-            log.info("job %s creado: %s (quality=%s audio=%s)", job_id, url, quality, audio)
+            log.info("job %s creado desde %s: %s (quality=%s audio=%s)", job_id, self.client_ip(), url, quality, audio)
             return self.send_json({"ok": True, "jobId": job_id, "job": job})
 
         if path.startswith("/api/cancel/"):
