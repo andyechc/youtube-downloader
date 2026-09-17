@@ -114,8 +114,6 @@ code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.86em;backgro
 .card-head h2{display:flex;align-items:center;gap:10px;margin:0;font-size:1rem;letter-spacing:-.02em}
 .h-icon{width:30px;height:30px;display:grid;place-items:center;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff}
 .hint{font-size:.75rem;color:var(--muted);border:1px solid var(--line);padding:6px 11px;border-radius:999px;background:rgba(255,255,255,.05)}
-.hint.mode{border-color:rgba(16,185,129,.3);color:#a7f3d0;background:rgba(16,185,129,.08)}
-.hint.mode.local{border-color:rgba(125,211,252,.35);color:#bae6fd;background:rgba(125,211,252,.08)}
 .field-label{display:block;font-weight:700;font-size:.9rem;margin:0 0 8px}
 .field-label span{color:var(--danger)}
 .field{position:relative;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 8px;background:rgba(255,255,255,.06);border-radius:16px;border:1px solid var(--line)}

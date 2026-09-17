@@ -191,7 +191,6 @@ let aborter = null;
 let localServer = false;
 let serverJobId = null;
 let pollTimer = null;
-const modePill = $('#modePill');
 
 async function detectLocalServer() {
   if (!/^https?:$/.test(location.protocol)) return;
@@ -204,13 +203,10 @@ async function detectLocalServer() {
       const data = await res.json().catch(() => ({}));
       if (data && data.ok !== false) {
         localServer = true;
-        modePill.textContent = 'modo local · máxima calidad';
-        modePill.classList.add('local');
         return;
       }
     }
   } catch { /* GitHub Pages: sin servidor, modo navegador */ }
-  modePill.textContent = 'modo navegador';
 }
 
 function selectedQuality() {
@@ -496,11 +492,14 @@ async function doPreview(event) {
     toast('Preview listo ✓');
   } catch (e) {
     console.error(e);
-    // Fallback: al menos mostrar título vía oEmbed
+    // oEmbed (YouTube directo) discrimina: si responde, el video EXISTE
+    // y el fallo es de los resolvedores públicos; si no, el video no existe.
+    let videoExists = false;
     try {
       const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
       const oe = await previewOEmbed(pageUrl);
       if (oe?.title) {
+        videoExists = true;
         pvThumb.src = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
         pvTitle.textContent = oe.title;
         pvChannel.textContent = oe.author_name || 'YouTube';
@@ -510,11 +509,11 @@ async function doPreview(event) {
         previewCard.hidden = false;
       }
     } catch { /* noop */ }
-    if (e?.providerDown) {
-      showAlert('Los resolvedores públicos están caídos ahora mismo (les pasa a menudo: son instancias gratuitas). Tu video existe; es la red la que falla. Alternativas de 1 clic abajo.');
+    if (e?.providerDown && videoExists) {
+      showAlert('Tu video existe, pero los resolvedores públicos están caídos ahora mismo (son instancias gratuitas y les pasa a menudo). Alternativas de 1 clic abajo.');
       showNetFallback(`https://www.youtube.com/watch?v=${videoId}`);
     } else {
-      showAlert(`No se pudo resolver ese video (${e.message || e}). Puede ser privado, con restricción de edad o un fallo temporal. Reintenta o usa el CLI.`);
+      showAlert(`No se pudo resolver ese video (${e.message || e}). Puede ser privado, con restricción de edad o que ya no exista.`);
     }
   } finally {
     btnPreview.disabled = false;
@@ -535,7 +534,7 @@ function setProgress(pct, downloaded, total, speedBps, etaSec) {
   progEta.textContent = Number.isFinite(etaSec) && etaSec >= 0 ? `quedan ~${Math.ceil(etaSec)}s` : '—';
 }
 
-async function doDownload() {
+async function doDownloadBrowser() {
   if (!current?.picked) { showAlert('Primero previsualiza el video.'); return; }
   hideAlert();
   aborter?.abort();
@@ -749,10 +748,9 @@ async function doServerPreview(raw) {
   }
 }
 
-const _doDownloadBrowser = doDownload;
 async function doDownload(evt) {
   if (localServer && current?.serverInfo) return doServerDownload();
-  return _doDownloadBrowser(evt);
+  return doDownloadBrowser(evt);
 }
 
 async function doServerDownload() {
