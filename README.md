@@ -103,11 +103,16 @@ La web detecta `/api/*` en el mismo origen y pasa a **modo local**: descargas co
 ### Docker
 
 ```bash
-docker compose up --build   # http://localhost:8000, descargas en ./downloads
+docker compose up --build   # app en :8000, nginx en :80 → http://localhost
 ```
 
 - Imagen `python:3.12-slim` + `ffmpeg` + `node` (runtime JS que pide `yt-dlp`).
-- `PORT=8000 docker compose up` si quieres otro puerto.
+- Variables en `.env` (copia `.env.example`):
+  | Var | Default | Para qué |
+  |-----|---------|----------|
+  | `PORT` | `8000` | Puerto directo de la app |
+  | `NGINX_PORT` | `80` | Puerto público del proxy inverso |
+  | `NGINX_DOMAIN` | `localhost` | Dominio(s) del `server_name` de nginx |
 - Tus archivos quedan en `./downloads/` (volumen persistente, `YT_OUT_DIR=/downloads`).
 - Solo CLI dentro del contenedor:
   `docker compose run --rm yt-downloader python youtube-downloader.py "URL" -a`
