@@ -108,5 +108,5 @@ jobs:
             > y un runtime JS (`node`, `deno` o `bun`) para la extracción de formatos.
 
             ### Web
-            La web vive en GitHub Pages (carpeta `web/`): sin servidor, descarga directo en el navegador.
+            La web (carpeta `web/`) se sirve en local con `./start-web.sh` o `python server.py --open`.
             Para máxima calidad + MP3 320 + playlists, usa el CLI o `python server.py` en local.

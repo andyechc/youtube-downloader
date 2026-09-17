@@ -4,16 +4,14 @@
 
 **Pega un link. Descarga en tu navegador.**
 
-Web 100% estática (sin servidor, sin cuentas, sin anuncios) + CLI en Python con `yt-dlp` para máxima calidad.
+Web local (sin cuentas, sin anuncios) + CLI en Python con `yt-dlp` para máxima calidad.
 
-[![Web](https://img.shields.io/badge/web-GitHub_Pages-ff3b30?style=for-the-badge&logo=github)](https://andyechc.github.io/youtube-downloader/)
 [![Release](https://img.shields.io/github/v/release/andyechc/youtube-downloader?style=for-the-badge&logo=github&label=CLI&color=7c3aed)](https://github.com/andyechc/youtube-downloader/releases)
-[![Pages](https://img.shields.io/github/deployments/andyechc/youtube-downloader/github-pages?style=for-the-badge&label=pages)](https://andyechc.github.io/youtube-downloader/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](youtube-downloader.py)
 [![yt-dlp](https://img.shields.io/badge/powered_by-yt--dlp-ff6b35?style=for-the-badge)](https://github.com/yt-dlp/yt-dlp)
 [![License](https://img.shields.io/badge/license-MIT-10b981?style=for-the-badge)](LICENSE)
 
-[🌐 Abrir la web](https://andyechc.github.io/youtube-downloader/) · [⬇️ Descargar el CLI](https://github.com/andyechc/youtube-downloader/releases) · [🐞 Reportar fallo](https://github.com/andyechc/youtube-downloader/issues)
+[⬇️ Descargar el CLI](https://github.com/andyechc/youtube-downloader/releases) · [🐞 Reportar fallo](https://github.com/andyechc/youtube-downloader/issues)
 
 ![YT Downloader — portada](web/assets/og.png)
 
@@ -23,9 +21,9 @@ Web 100% estática (sin servidor, sin cuentas, sin anuncios) + CLI en Python con
 
 ## ✨ Qué es
 
-| | Web (esta página) | CLI (Releases) |
+| | Web (local) | CLI (Releases) |
 |---|---|---|
-| 🏠 Dónde corre | Tu navegador, sitio estático en GitHub Pages | Tu terminal, binario único |
+| 🏠 Dónde corre | Tu navegador, servida desde tu máquina | Tu terminal, binario único |
 | 📥 Destino | Carpeta **Descargas** del navegador | Carpeta que elijas (`~/Downloads/YT`) |
 | 🎬 Video | MP4 con audio, hasta 1080p | Máxima calidad + merge + 4K si existe |
 | 🎵 Audio | M4A calidad original | **MP3 320kbps** (ffmpeg) |
@@ -48,10 +46,16 @@ Web 100% estática (sin servidor, sin cuentas, sin anuncios) + CLI en Python con
 
 ## 🚀 Uso rápido
 
-### Web — sin instalar nada
+### Web — en local
 
-1. Abre <https://andyechc.github.io/youtube-downloader/>
-2. Pega un enlace (`youtube.com/watch`, `youtu.be/…`, `/shorts/…`, `music.youtube.com`)
+```bash
+./start-web.sh          # instala deps, chequea ffmpeg y abre http://127.0.0.1:8000
+# o manual:
+python3 -m http.server 8000 --directory web   # modo navegador puro
+python server.py --open                        # modo local con yt-dlp (máxima calidad)
+```
+
+1. Pega un enlace (`youtube.com/watch`, `youtu.be/…`, `/shorts/…`, `music.youtube.com`)
 3. Elige calidad (`Máxima / 1080 / 720 / 480 / 360`) y tipo (**Video MP4** o **Solo audio**)
 4. **Previsualizar** → **Descargar en mi navegador** (con progreso real: %, velocidad y tamaño; `Ctrl/⌘ + Enter` también descarga)
 
@@ -88,20 +92,20 @@ python youtube-downloader.py "URL" -q 1080
 | `-a, --audio` | Solo audio en MP3 320kbps |
 | `-q, --quality` | `best`, `1080`, `720`, `480`, `360` (default: `best`) |
 
-### Servidor local (opcional, modo pro)
+### Servidor local (modo pro, recomendado)
 
 ```bash
 python server.py --open   # http://127.0.0.1:8000
 ```
 
-La misma web servida en local detecta `/api/*` y pasa a **modo local**: descargas con `yt-dlp` + `ffmpeg` en tu máquina, y el navegador recibe el archivo igualmente.
+La web detecta `/api/*` en el mismo origen y pasa a **modo local**: descargas con `yt-dlp` + `ffmpeg` en tu máquina (máxima calidad, MP3 320, playlists), y el navegador recibe el archivo igualmente.
 
-## 🧠 Cómo funciona la web (sin backend)
+## 🧠 Cómo funciona la web
 
 ```text
-Navegador (GitHub Pages, estático)
+Navegador (servida en local)
  ├── 1. Valida el link y extrae el videoId (misma regex que el CLI)
- ├── 2. Preview:  Piped /streams/{id}  (failover x5)  →  fallback oEmbed
+ ├── 2. Preview:  Piped /streams/{id}  (failover) → Invidious → fallback oEmbed
  ├── 3. Selección: mejor muxed MP4 ≤ calidad  ·  mejor audio (mirror de resolve_quality)
  ├── 4. Descarga:  fetch → Blob → <a download>  (progreso real, cancelable)
  └── 5. Si detecta server.py en el mismo origen → usa /api/* (máxima calidad)
@@ -118,16 +122,16 @@ Navegador (GitHub Pages, estático)
 ├── youtube-downloader.py   # CLI (guiado + flags, yt-dlp + ffmpeg)
 ├── server.py               # servidor local opcional (stdlib + yt-dlp)
 ├── requirements.txt        # yt-dlp
-├── web/                    # sitio estático → GitHub Pages
+├── web/                    # UI web (se sirve en local)
 │   ├── index.html          # UI (form accesible, preview, progreso, comparativa)
 │   ├── style.css           # glass + responsive + reduced-motion
-│   ├── app.js              # lógica del CLI portada a JS + 3 modos
+│   ├── app.js              # lógica del CLI portada a JS + modos navegador/local
+│   ├── favicon.ico         # favicon (igual al logo)
 │   ├── site.webmanifest
 │   ├── 404.html
 │   └── assets/             # icon.svg, icon-*.png, og.png
 ├── docs/                   # capturas del README
 └── .github/workflows/
-    ├── pages.yml           # deploy web/ → Pages
     └── release.yml         # binarios CLI → Releases (tag v*)
 ```
 

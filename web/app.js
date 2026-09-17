@@ -1,4 +1,4 @@
-/* YT Downloader — frontend 100% estático (GitHub Pages).
+/* YT Downloader — frontend local (web + server.py opcional).
  * Lógica portada del CLI (youtube-downloader.py):
  *  QUALITIES, resolución de calidad por altura y selección de stream.
  * Sin backend: resolvemos vía API pública Piped y descargamos al navegador
@@ -186,7 +186,7 @@ let aborter = null;
 
 /* Modo servidor local (mejora progresiva): si la web se sirve desde
  * `python server.py` (mismo origen con /api/*), lo usamos para máxima
- * calidad, MP3 320 y playlists. En GitHub Pages no existe y se usa el
+ * calidad, MP3 320 y playlists. Sin servidor se usa el
  * modo navegador (Piped). */
 let localServer = false;
 let serverJobId = null;
@@ -206,7 +206,7 @@ async function detectLocalServer() {
         return;
       }
     }
-  } catch { /* GitHub Pages: sin servidor, modo navegador */ }
+  } catch { /* sin servidor: modo navegador */ }
 }
 
 function selectedQuality() {
