@@ -3,15 +3,25 @@
 
 import argparse
 import os
-import select
 import shutil
 import subprocess
 import sys
-import termios
-import tty
 from pathlib import Path
 
 import yt_dlp
+
+# termios/tty/select son POSIX. En Windows no existen: el CLI usa el modo
+# numerado (sin flechas) y sin tecla de cancelado rápido (usa Ctrl+C).
+try:
+    import select
+    import termios
+    import tty
+    HAS_TERMIOS = True
+except ImportError:  # Windows
+    select = None  # type: ignore
+    termios = None  # type: ignore
+    tty = None  # type: ignore
+    HAS_TERMIOS = False
 
 DEFAULT_DIR = Path.home() / "Downloads" / "YT"
 QUALITIES = ["best", "1080", "720", "480", "360"]
@@ -210,7 +220,7 @@ def _read_key() -> str:
 
 
 def arrow_menu(title: str, choices: list[str], default: int = 0) -> int:
-    if not sys.stdin.isatty():
+    if not sys.stdin.isatty() or not HAS_TERMIOS:
         print(title)
         for i, c in enumerate(choices):
             print(f"  {i + 1}) {c}")
@@ -372,7 +382,7 @@ def guided_flow() -> int:
 
 
 def cancel_pressed() -> bool:
-    if not sys.stdin.isatty():
+    if not HAS_TERMIOS or not sys.stdin.isatty():
         return False
     fd = sys.stdin.fileno()
     try:
@@ -431,10 +441,12 @@ def download(url: str, out_dir: Path, quality: str, audio: bool) -> int:
     old = None
     result = 0
     try:
-        if sys.stdin.isatty():
+        if HAS_TERMIOS and sys.stdin.isatty():
             old = termios.tcgetattr(fd)
             tty.setcbreak(fd)
             print(paint("  [Q / ESC / Ctrl+C] para cancelar", DIM))
+        elif sys.stdin.isatty():
+            print(paint("  [Ctrl+C] para cancelar", DIM))
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
     except yt_dlp.utils.DownloadCancelled:
