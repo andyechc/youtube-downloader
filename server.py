@@ -5,6 +5,7 @@ Compatible con despliegue local y Vercel (via adaptador).
 """
 import argparse
 import json
+import logging
 import mimetypes
 import os
 import shutil
@@ -14,6 +15,7 @@ import threading
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from logging.handlers import RotatingFileHandler
 from socketserver import ThreadingMixIn
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -23,6 +25,46 @@ try:
 except ImportError:
     print("[server] yt-dlp no instalado. Ejecuta: pip install -r requirements.txt", file=sys.stderr)
     sys.exit(1)
+
+# ---------------------------------------------------------------------------
+# Logging: consola (legible) + archivo rotativo server.log
+# ---------------------------------------------------------------------------
+log = logging.getLogger("ytdl")
+
+
+def setup_logging(log_file: str = "server.log", level: str = "INFO") -> Path:
+    """Consola en WARNING-INFO + archivo rotativo (1 MB x 3) con todo."""
+    log.setLevel(logging.DEBUG)
+    log.handlers.clear()
+    fmt_file = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    fmt_con = logging.Formatter("[%(levelname)s] %(message)s")
+
+    path = Path(log_file)
+    if not path.is_absolute():
+        path = ROOT / path
+    fh = RotatingFileHandler(path, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(fmt_file)
+    log.addHandler(fh)
+
+    ch = logging.StreamHandler(sys.stderr)
+    ch.setLevel(getattr(logging, level.upper(), logging.INFO))
+    ch.setFormatter(fmt_con)
+    log.addHandler(ch)
+    return path
+
+
+class YtdlpLogger:
+    """Adaptador para que el chatter de yt-dlp caiga en server.log (DEBUG)."""
+
+    def debug(self, msg: str) -> None:
+        log.debug("yt-dlp: %s", msg)
+
+    def warning(self, msg: str) -> None:
+        log.warning("yt-dlp: %s", msg)
+
+    def error(self, msg: str) -> None:
+        log.error("yt-dlp: %s", msg)
 
 # ---------------------------------------------------------------------------
 # Config
@@ -138,6 +180,7 @@ def build_opts(url: str, out_dir: Path, quality: str, audio: bool) -> dict:
     opts = base_opts()
     opts["quiet"] = False
     opts["no_warnings"] = False
+    opts["logger"] = YtdlpLogger()
     opts["outtmpl"] = str(out_dir / "%(title)s [%(id)s].%(ext)s")
     opts["concurrent_fragment_downloads"] = 8
     opts["buffersize"] = 1024 * 16
@@ -284,6 +327,7 @@ def download_worker(job_id: str):
     audio = job["audio"]
     out_dir = Path(job["out_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
+    log.info("job %s inicio: %s (quality=%s audio=%s -> %s)", job_id, url, quality, audio, out_dir)
 
     tracked_files: list[str] = []
 
@@ -365,19 +409,22 @@ def download_worker(job_id: str):
                     # try to get title from first file
                     if files:
                         j["result_file"] = files[0]
+                    log.info("job %s listo: %s", job_id, files[0] if files else "(sin archivos)")
     except yt_dlp.utils.DownloadCancelled:
         with jobs_lock:
             j = jobs.get(job_id)
             if j:
                 j["status"] = "cancelled"
                 j["error"] = "Descarga cancelada"
-    except Exception as e:
+        log.info("job %s cancelado por el usuario", job_id)
+    except Exception:
         with jobs_lock:
             j = jobs.get(job_id)
             if j:
                 j["status"] = "error"
-                j["error"] = str(e)[:500]
+                j["error"] = str(sys.exc_info()[1])[:500]
                 j["progress"] = 0
+        log.exception("job %s error", job_id)
     # handle partial cleanup if cancelled
     with jobs_lock:
         j = jobs.get(job_id)
@@ -395,8 +442,9 @@ def download_worker(job_id: str):
 # ---------------------------------------------------------------------------
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
-        # limit log noise but keep useful
-        sys.stderr.write(f"[{self.log_date_time_string()}] {format%args}\n")
+        # El polling de /api/progress es ruidoso: va a DEBUG (archivo),
+        # el resto de rutas también queda trazado sin ensuciar la consola.
+        log.debug("%s %s", self.address_string(), format % args)
 
     def send_json(self, data, status=200, headers=None):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -577,12 +625,15 @@ class Handler(BaseHTTPRequestHandler):
                 if not info:
                     # yt-dlp devuelve None (en vez de excepción) si YouTube no
                     # entrega metadata: privado, eliminado, restricción, login, …
+                    log.warning("preview sin metadata: %s", url)
                     return self.send_json({"ok": False, "error": "YouTube no devolvió información para ese enlace (privado, eliminado o con restricción)."}, status=422)
                 payload = sanitize_info(info, quality, audio)
+                log.info("preview ok: %s", url)
                 return self.send_json({"ok": True, "info": payload, "quality": quality, "audio": audio})
             except Exception as e:
                 # yt-dlp may throw DownloadError with message
                 msg = str(e)[:800]
+                log.warning("preview fallo: %s -> %s", url, msg)
                 return self.send_json({"ok": False, "error": msg}, status=422)
 
         if path == "/api/search":
@@ -637,6 +688,7 @@ class Handler(BaseHTTPRequestHandler):
             # start thread
             t = threading.Thread(target=download_worker, args=(job_id,), daemon=True)
             t.start()
+            log.info("job %s creado: %s (quality=%s audio=%s)", job_id, url, quality, audio)
             return self.send_json({"ok": True, "jobId": job_id, "job": job})
 
         if path.startswith("/api/cancel/"):
@@ -673,21 +725,15 @@ class ThreadedServer(ThreadingMixIn, HTTPServer):
 def run(host="127.0.0.1", port=8000):
     # ensure web dir exists
     if not WEB_DIR.exists():
-        print(f"[error] No se encontró {WEB_DIR}. Crea la carpeta web/ con index.html", file=sys.stderr)
+        log.error("No se encontró %s. Crea la carpeta web/ con index.html", WEB_DIR)
         sys.exit(1)
     server_address = (host, port)
     httpd = ThreadedServer(server_address, Handler)
-    print(f"  ╔════════════════════════════════════════════╗")
-    print(f"  ║   YT Downloader Web — http://{host}:{port}   ║")
-    print(f"  ╚════════════════════════════════════════════╝")
-    print(f"  • UI: http://{host}:{port}/")
-    print(f"  • API health: http://{host}:{port}/api/health")
-    print(f"  • Carpeta descargas: {DEFAULT_DIR}")
-    print(f"  • Presiona Ctrl+C para detener\n")
+    log.info("YT Downloader Web — http://%s:%s (UI, API health, descargas en %s)", host, port, DEFAULT_DIR)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\n  Deteniendo servidor...")
+        log.info("Deteniendo servidor...")
         httpd.shutdown()
 
 def build_parser():
@@ -695,10 +741,15 @@ def build_parser():
     p.add_argument("--host", default="127.0.0.1", help="Host (default 127.0.0.1, usa 0.0.0.0 para red local)")
     p.add_argument("--port", type=int, default=8000, help="Puerto (default 8000)")
     p.add_argument("--open", action="store_true", help="Abrir navegador automáticamente")
+    p.add_argument("--log-file", default="server.log", help="Archivo de log (default server.log, rotativo 1MB x3)")
+    p.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+                   help="Nivel de log en consola (el archivo siempre guarda DEBUG)")
     return p
 
 if __name__ == "__main__":
     args = build_parser().parse_args()
+    log_path = setup_logging(args.log_file, args.log_level)
+    log.info("Log en %s", log_path)
     if args.open:
         import webbrowser
         threading.Timer(0.8, lambda: webbrowser.open(f"http://{args.host if args.host!='0.0.0.0' else '127.0.0.1'}:{args.port}")).start()

@@ -144,6 +144,9 @@ python3 -m http.server 8000 --directory web
 # Web + servidor (modo local con yt-dlp)
 source venv/bin/activate && python server.py --open
 
+# Logs: consola (INFO) + server.log rotativo (1MB x3, nivel DEBUG).
+# Cambiar destino/nivel: python server.py --log-file /tmp/yt.log --log-level DEBUG
+
 # Publicar CLI: taggea y los binarios se compilan solos
 git tag v1.0.0 && git push origin v1.0.0
 ```
