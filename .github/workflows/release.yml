@@ -1,0 +1,115 @@
+# Publica el CLI como binarios en GitHub Releases.
+# Uso: git tag v1.0.0 && git push origin v1.0.0
+name: Release CLI
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Binario ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: youtube-downloader-linux
+          - os: macos-latest
+            asset: youtube-downloader-macos
+          - os: windows-latest
+            asset: youtube-downloader-windows.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Humo — importa el CLI
+        run: python -c "import ast; ast.parse(open('youtube-downloader.py').read()); print('CLI OK')"
+
+      - name: Compilar binario
+        run: >
+          pyinstaller --onefile --clean --name ${{ matrix.asset }}
+          --collect-all yt_dlp
+          youtube-downloader.py
+
+      - name: Probar binario (--help)
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            ./dist/${{ matrix.asset }} --help
+          else
+            chmod +x ./dist/${{ matrix.asset }} && ./dist/${{ matrix.asset }} --help
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Empaquetar (zip por SO + script portable)
+        run: |
+          ls -R dist
+          cp youtube-downloader.py dist/youtube-downloader.py
+          cp requirements.txt dist/requirements.txt
+          cd dist
+          mv youtube-downloader-linux/youtube-downloader-linux . 2>/dev/null || true
+          mv youtube-downloader-macos/youtube-downloader-macos . 2>/dev/null || true
+          mv "youtube-downloader-windows.exe/youtube-downloader-windows.exe" . 2>/dev/null || true
+          ls -la
+
+      - name: Crear Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/youtube-downloader-linux
+            dist/youtube-downloader-macos
+            dist/youtube-downloader-windows.exe
+            dist/youtube-downloader.py
+          generate_release_notes: true
+          body: |
+            ## YT Downloader ${{ github.ref_name }}
+
+            ### CLI — binarios listos para usar
+            | SO | Archivo |
+            |----|---------|
+            | Linux | `youtube-downloader-linux` |
+            | macOS | `youtube-downloader-macos` |
+            | Windows | `youtube-downloader-windows.exe` |
+
+            ```bash
+            chmod +x youtube-downloader-*   # Linux/macOS
+            ./youtube-downloader-macos "https://www.youtube.com/watch?v=..." -q 720
+            ```
+
+            > Requiere **ffmpeg** (`brew install ffmpeg` / `sudo apt install ffmpeg` / `winget install ffmpeg`)
+            > y un runtime JS (`node`, `deno` o `bun`) para la extracción de formatos.
+
+            ### Web
+            La web vive en GitHub Pages (carpeta `web/`): sin servidor, descarga directo en el navegador.
+            Para máxima calidad + MP3 320 + playlists, usa el CLI o `python server.py` en local.

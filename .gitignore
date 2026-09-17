@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+
+# yt-dlp / descargas
+*.part
+*.ytdl
+*.temp
+.YT/
+Downloads/
+
+# Servidor local
+server.log
+
+# macOS / editores
+.DS_Store
+.vscode/
+.idea/
+
+# Releases locales
+dist/
+build/
+*.spec

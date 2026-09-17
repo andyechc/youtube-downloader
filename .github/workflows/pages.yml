@@ -1,0 +1,43 @@
+# Despliega la web estática (web/) en GitHub Pages
+name: Deploy Web to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar sitio (inyecta base URL de Pages)
+        run: |
+          # Las URLs OG/canonical apuntan a andyechc.github.io/youtube-downloader
+          grep -o 'andyechc.github.io/youtube-downloader' web/index.html | head -1
+          ls -R web
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

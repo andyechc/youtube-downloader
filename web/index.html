@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>YT Downloader — Pega un link, descarga en tu navegador</title>
+  <meta name="description" content="Descarga videos y audio de YouTube directo en tu navegador. Sin servidor, sin cuentas, sin anuncios. 100% estático en GitHub Pages + CLI en Python con yt-dlp para máxima calidad." />
+  <meta name="theme-color" content="#0b0b10" />
+  <link rel="canonical" href="https://andyechc.github.io/youtube-downloader/" />
+
+  <!-- Open Graph / Twitter -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="YT Downloader" />
+  <meta property="og:title" content="YT Downloader — Pega un link. Descarga en tu navegador." />
+  <meta property="og:description" content="Video o audio de YouTube directo a tu carpeta Descargas. Sin servidor. Con preview, calidad a elegir y barra de progreso real." />
+  <meta property="og:image" content="https://andyechc.github.io/youtube-downloader/assets/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="YT Downloader — descarga en tu navegador" />
+  <meta name="twitter:description" content="Pega un link de YouTube, elige calidad y descarga. Sin servidor, sin anuncios." />
+  <meta name="twitter:image" content="https://andyechc.github.io/youtube-downloader/assets/og.png" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
+  <link rel="apple-touch-icon" href="assets/icon-180.png" />
+  <link rel="manifest" href="site.webmanifest" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <a class="skip" href="#form-card">Saltar al descargador</a>
+
+  <div class="bg" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+    <div class="grid"></div>
+  </div>
+
+  <header class="header">
+    <div class="wrap header-inner">
+      <a class="brand" href="#top" aria-label="YT Downloader — inicio">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+        </span>
+        <span class="brand-text">
+          <strong>YT <span>Downloader</span></strong>
+          <small>100% en tu navegador</small>
+        </span>
+      </a>
+      <nav class="nav" aria-label="Navegación principal">
+        <a href="#como-funciona">Cómo funciona</a>
+        <a href="#web-vs-cli">Web vs CLI</a>
+        <a class="btn tiny ghost" href="https://github.com/andyechc/youtube-downloader" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.35 1.08 2.92.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.1.39-1.99 1.03-2.69-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.58 9.58 0 0 1 5 0c1.91-1.3 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.6 1.03 2.69 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85V21c0 .27.18.58.69.48A10 10 0 0 0 12 2z"/></svg>
+          GitHub
+        </a>
+        <a class="btn tiny primary" href="https://github.com/andyechc/youtube-downloader/releases" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>
+          Descargar CLI
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap main" id="top">
+    <!-- HERO -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow">
+          <span class="spark">Sin servidor</span>
+          <span>Pega · elige · descarga</span>
+        </p>
+        <h1 id="hero-title">Pega un link.<br /><span class="grad">Descarga en tu navegador.</span></h1>
+        <p class="lead">Sin cuentas, sin anuncios, sin subir nada a ningún servidor. La web resuelve el video en tu propio navegador y lo guarda en tu carpeta <strong>Descargas</strong>.</p>
+        <ul class="hero-points">
+          <li>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+            Preview real antes de descargar
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+            Calidad a elegir · video o solo audio
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+            Progreso real · cancela cuando quieras
+          </li>
+        </ul>
+        <div class="hero-cta">
+          <a class="btn primary large" href="#form-card">Empezar ahora</a>
+          <a class="btn ghost large" href="#web-vs-cli">¿Necesitas MP3 o 4K?</a>
+        </div>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="art-glow"></div>
+        <div class="art-card">
+          <div class="art-thumb">
+            <img src="https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg" alt="" loading="eager" fetchpriority="high" />
+            <span class="art-play"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg></span>
+            <span class="art-duration">3:33</span>
+            <span class="art-hd">HD</span>
+          </div>
+          <div class="art-body">
+            <div class="art-pills">
+              <span class="pill pill-live"><span class="pill-dot"></span>EN TU NAVEGADOR</span>
+              <span class="pill pill-size">MP4 · M4A</span>
+            </div>
+            <p class="art-title">Tu video, directo a Descargas</p>
+            <p class="art-channel">Sin servidor · sin cola · sin espera</p>
+            <div class="art-progress">
+              <div class="art-bar"><div class="art-bar-fill" style="width:72%"></div></div>
+              <span class="art-progress-label">72% · 6.4 MB/s</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FORM -->
+    <section class="card" id="form-card" aria-labelledby="form-title">
+      <form id="dl-form" novalidate>
+        <div class="card-head">
+          <h2 id="form-title">
+            <span class="h-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/><path d="M14 10a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></svg>
+            </span>
+            Descargar de YouTube
+          </h2>
+          <span class="hint">Video, Shorts · las playlists completas van en el CLI</span>
+          <span class="hint mode" id="modePill" role="status">modo navegador</span>
+        </div>
+
+        <label class="field-label" for="urlInput">Enlace de YouTube <span aria-hidden="true">*</span></label>
+        <div class="field">
+          <span class="field-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5"/><path d="M14 10a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5"/></svg>
+          </span>
+          <input
+            id="urlInput"
+            name="url"
+            type="url"
+            inputmode="url"
+            autocomplete="url"
+            enterkeyhint="go"
+            spellcheck="false"
+            placeholder="https://www.youtube.com/watch?v=…"
+            aria-describedby="url-help url-error"
+            required
+          />
+          <button class="icon-btn field-clear" id="btnClear" type="button" aria-label="Limpiar enlace" hidden>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <p class="field-help" id="url-help">Acepta <code>youtube.com/watch</code>, <code>youtu.be/…</code>, <code>/shorts/…</code> y <code>music.youtube.com</code>.</p>
+        <p class="field-error" id="url-error" role="alert" hidden></p>
+
+        <div class="options">
+          <fieldset class="opt">
+            <legend>Calidad de video</legend>
+            <div class="chips" role="radiogroup" aria-label="Calidad de video">
+              <label class="chip"><input type="radio" name="quality" value="best" checked /><span>Máxima</span></label>
+              <label class="chip"><input type="radio" name="quality" value="1080" /><span>1080p</span></label>
+              <label class="chip"><input type="radio" name="quality" value="720" /><span>720p</span></label>
+              <label class="chip"><input type="radio" name="quality" value="480" /><span>480p</span></label>
+              <label class="chip"><input type="radio" name="quality" value="360" /><span>360p</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="opt">
+            <legend>Tipo de archivo</legend>
+            <div class="segmented" role="radiogroup" aria-label="Tipo de archivo">
+              <label class="seg">
+                <input type="radio" name="kind" value="video" checked />
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="13" height="12" rx="2"/><path d="M15 10l7-3v10l-7-3"/></svg>
+                <span>Video <small>MP4</small></span>
+              </label>
+              <label class="seg">
+                <input type="radio" name="kind" value="audio" />
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>
+                <span>Solo audio <small>M4A</small></span>
+              </label>
+            </div>
+            <p class="opt-hint" id="kind-hint">Video MP4 con audio incluido, listo para TV y móvil.</p>
+          </fieldset>
+        </div>
+
+        <div class="actions">
+          <button class="btn ghost" id="btnPaste" type="button">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+            Pegar
+          </button>
+          <button class="btn secondary" id="btnPreview" type="submit">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span id="btnPreviewText">Previsualizar</span>
+          </button>
+        </div>
+
+        <div class="alert" id="alertBox" role="status" hidden></div>
+      </form>
+    </section>
+
+    <!-- PREVIEW -->
+    <section class="card preview" id="previewCard" aria-labelledby="pvTitle" hidden>
+      <div class="preview-layout">
+        <div class="thumb-wrap">
+          <img id="pvThumb" alt="Miniatura del video" loading="lazy" />
+          <span class="thumb-badge" id="pvDuration">0:00</span>
+        </div>
+        <div class="pv-meta">
+          <div class="pv-top">
+            <span class="badge-soft" id="pvTypeBadge">VIDEO · MP4</span>
+            <span class="pv-size" id="pvSize">—</span>
+            <span class="pv-quality" id="pvQualityBadge">Máxima</span>
+          </div>
+          <h3 id="pvTitle">Título del video</h3>
+          <p class="pv-sub">
+            <span class="pv-channel" id="pvChannel">Canal</span>
+            <span aria-hidden="true">·</span>
+            <span id="pvViews">—</span>
+            <span aria-hidden="true">·</span>
+            <span id="pvDate">—</span>
+          </p>
+          <p class="pv-desc" id="pvDesc"></p>
+          <div class="pv-actions">
+            <button class="btn primary large" id="btnDownload" type="button">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>
+              Descargar en mi navegador
+            </button>
+            <a class="btn ghost" id="btnOpenYT" href="#" target="_blank" rel="noopener">
+              Ver en YouTube
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg>
+            </a>
+          </div>
+          <p class="pv-note">Se guarda en tu carpeta <strong>Descargas</strong>. Nada se sube a ningún servidor.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROGRESS -->
+    <section class="card progress" id="progressCard" aria-labelledby="progressTitle" hidden>
+      <div class="prog-head">
+        <h3 id="progressTitle">
+          <span class="spin" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>
+          </span>
+          <span id="progressLabel">Descargando…</span>
+        </h3>
+        <span class="prog-eta" id="progEta" aria-live="polite">—</span>
+        <button class="btn tiny danger ghost" id="btnCancel" type="button">Cancelar</button>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar" role="progressbar" aria-label="Progreso de descarga" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="barProg">
+          <div class="bar-fill" id="barFill" style="width:0%"></div>
+        </div>
+        <div class="bar-labels">
+          <span id="progPct">0%</span>
+          <span id="progSpeed">—</span>
+          <span id="progDone">0 / —</span>
+        </div>
+      </div>
+      <p class="prog-file"><span aria-hidden="true">▸</span> <span id="progFile">Preparando…</span></p>
+      <div class="prog-done" id="progDoneBox" hidden>
+        <p class="done-title">¡Listo! Revisa tu carpeta Descargas.</p>
+        <div class="prog-done-actions">
+          <a class="btn primary" id="btnSaveAgain" href="#" download>Guardar de nuevo</a>
+          <button class="btn ghost" id="btnOther" type="button">Descargar otro</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- COMO FUNCIONA -->
+    <section class="card steps" id="como-funciona" aria-labelledby="steps-title">
+      <h2 id="steps-title">Cómo funciona</h2>
+      <ol class="steps-grid">
+        <li>
+          <span class="step-n" aria-hidden="true">1</span>
+          <h3>Pega el enlace</h3>
+          <p>Soporta videos, Shorts y YouTube Music. Validamos el link en tu navegador, sin enviarlo a ningún lado salvo al servicio público de resolución.</p>
+        </li>
+        <li>
+          <span class="step-n" aria-hidden="true">2</span>
+          <h3>Elige calidad</h3>
+          <p>La misma lógica del CLI: <code>best / 1080 / 720 / 480 / 360</code> y modo video o solo audio. Vemos el preview antes de bajar nada.</p>
+        </li>
+        <li>
+          <span class="step-n" aria-hidden="true">3</span>
+          <h3>Guarda el archivo</h3>
+          <p>El archivo viaja directo a tu carpeta Descargas con barra de progreso real (%, velocidad y tamaño). Puedes cancelar en cualquier momento.</p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- WEB vs CLI -->
+    <section class="card compare" id="web-vs-cli" aria-labelledby="compare-title">
+      <div class="compare-head">
+        <h2 id="compare-title">Web vs CLI</h2>
+        <p>La web es para lo rápido. El CLI es para lo exigente.</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <caption class="visually-hidden">Comparación entre la web y el CLI</caption>
+          <thead>
+            <tr><th scope="col">Caso</th><th scope="col">Web (esta página)</th><th scope="col">CLI (Releases)</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Instalación</th><td>Nada. Funciona aquí mismo.</td><td>Binario único desde Releases.</td></tr>
+            <tr><th scope="row">Destino</th><td>Carpeta Descargas del navegador.</td><td>Carpeta que elijas (<code>~/Downloads/YT</code>).</td></tr>
+            <tr><th scope="row">Video</th><td>MP4 hasta 1080p.</td><td>Máxima calidad + merge + 4K si existe.</td></tr>
+            <tr><th scope="row">Audio</th><td>M4A calidad original.</td><td>MP3 320kbps con ffmpeg.</td></tr>
+            <tr><th scope="row">Playlists</th><td>Solo el video del enlace.</td><td>Playlists completas.</td></tr>
+            <tr><th scope="row">Sin internet del servidor</th><td><span class="tag ok">Sí, es estática</span></td><td><span class="tag ok">Sí, es local</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="compare-cta">
+        <a class="btn primary" href="https://github.com/andyechc/youtube-downloader/releases" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>
+          Ir a Releases y bajar el CLI
+        </a>
+        <p class="mono">Windows · macOS · Linux — con <code>yt-dlp</code> + <code>ffmpeg</code></p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>Hecho para uso personal · Respeta los derechos de cada video y los términos de YouTube.</span>
+      <span class="footer-links">
+        <a href="https://github.com/andyechc/youtube-downloader" target="_blank" rel="noopener">Código</a> ·
+        <a href="https://github.com/andyechc/youtube-downloader/releases" target="_blank" rel="noopener">CLI</a> ·
+        <a href="https://github.com/andyechc/youtube-downloader/issues" target="_blank" rel="noopener">Reportar fallo</a>
+      </span>
+    </footer>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js" defer></script>
+</body>
+</html>
