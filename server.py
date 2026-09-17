@@ -174,6 +174,8 @@ def search_youtube(query: str, page: int = 1, per_page: int = SEARCH_PER_PAGE) -
     opts["extract_flat"] = "in_playlist"
     with yt_dlp.YoutubeDL(opts) as ydl:
         result = ydl.extract_info(search_query, download=False)
+    if not result:
+        raise ValueError("El buscador no devolvió resultados.")
     entries = result.get("entries") or []
     # Slice for current page
     start = (page - 1) * per_page
@@ -206,6 +208,8 @@ def search_youtube(query: str, page: int = 1, per_page: int = SEARCH_PER_PAGE) -
 
 def sanitize_info(info: dict, quality: str, audio: bool) -> dict:
     """Convierte info cruda de yt-dlp en payload liviano para el frontend."""
+    if not info:
+        raise ValueError("Sin información del video (None de yt-dlp).")
     if info.get("_type") == "playlist":
         entries = []
         total_size = 0
@@ -570,6 +574,10 @@ class Handler(BaseHTTPRequestHandler):
                 opts["noplaylist"] = False
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(url, download=False)
+                if not info:
+                    # yt-dlp devuelve None (en vez de excepción) si YouTube no
+                    # entrega metadata: privado, eliminado, restricción, login, …
+                    return self.send_json({"ok": False, "error": "YouTube no devolvió información para ese enlace (privado, eliminado o con restricción)."}, status=422)
                 payload = sanitize_info(info, quality, audio)
                 return self.send_json({"ok": True, "info": payload, "quality": quality, "audio": audio})
             except Exception as e:
