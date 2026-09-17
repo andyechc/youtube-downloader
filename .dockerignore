@@ -1,8 +1,0 @@
-venv/
-__pycache__/
-*.py[cod]
-.git/
-downloads/
-.DS_Store
-docs/
-server.log

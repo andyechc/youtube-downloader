@@ -100,23 +100,6 @@ python server.py --open   # http://127.0.0.1:8000
 
 La web detecta `/api/*` en el mismo origen y pasa a **modo local**: descargas con `yt-dlp` + `ffmpeg` en tu máquina (máxima calidad, MP3 320, playlists), y el navegador recibe el archivo igualmente.
 
-### Docker
-
-```bash
-docker compose up --build   # app en :8000, nginx en :80 → http://localhost
-```
-
-- Imagen `python:3.12-slim` + `ffmpeg` + `node` (runtime JS que pide `yt-dlp`).
-- Variables en `.env` (copia `.env.example`):
-  | Var | Default | Para qué |
-  |-----|---------|----------|
-  | `PORT` | `8000` | Puerto directo de la app |
-  | `NGINX_PORT` | `80` | Puerto público del proxy inverso |
-  | `NGINX_DOMAIN` | `localhost` | Dominio(s) del `server_name` de nginx |
-- Tus archivos quedan en `./downloads/` (volumen persistente, `YT_OUT_DIR=/downloads`).
-- Solo CLI dentro del contenedor:
-  `docker compose run --rm yt-downloader python youtube-downloader.py "URL" -a`
-
 ## 🧠 Cómo funciona la web
 
 ```text
@@ -136,9 +119,6 @@ Navegador (servida en local)
 
 ```text
 .
-├── Dockerfile              # servidor + ffmpeg + node (python:3.12-slim)
-├── docker-compose.yml      # puerto 8000, volumen ./downloads
-├── .dockerignore
 ├── youtube-downloader.py   # CLI (guiado + flags, yt-dlp + ffmpeg)
 ├── server.py               # servidor local opcional (stdlib + yt-dlp)
 ├── requirements.txt        # yt-dlp
