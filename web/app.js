@@ -666,8 +666,37 @@ btnCancel.addEventListener('click', () => {
     toast('Descarga cancelada');
   } else aborter?.abort('cancelled');
 });
-btnOther.addEventListener('click', () => {
-  progressCard.hidden = true;
+/* "Guardar de nuevo" con errores VISIBLES: si el servidor ya entregó y borró
+ * (410) o algo falla, se muestra en vez de descargar un JSON misterioso. */
+btnSaveAgain.addEventListener('click', async (e) => {
+  const href = btnSaveAgain.getAttribute('href') || '';
+  if (!href || href === '#' || href.startsWith('blob:')) return; // nativo
+  e.preventDefault();
+  const old = btnSaveAgain.textContent;
+  btnSaveAgain.textContent = 'Trayendo archivo…';
+  try {
+    const res = await fetch(href);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Error ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = btnSaveAgain.download || 'descarga';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+    toast('Archivo guardado ✓');
+  } catch (err) {
+    showAlert(`No se pudo traer el archivo: ${err.message}`);
+  } finally {
+    btnSaveAgain.textContent = old;
+  }
+});
+btnOther.addEventListener('click', () => {  progressCard.hidden = true;
   previewCard.hidden = true;
   urlInput.value = '';
   btnClear.hidden = true;
@@ -817,7 +846,7 @@ async function pollServerJob() {
         a.click();
         a.remove();
         progDoneBox.hidden = false;
-        showAlert('Guardado en tu navegador y en la carpeta del servidor.', true);
+        showAlert('Descarga automática iniciada. Si no te llegó nada, usa «Guardar de nuevo».', true);
         toast('¡Descarga completada! ✓', 3200);
       } else if (job.status === 'error') {
         progressLabel.textContent = 'Error';
