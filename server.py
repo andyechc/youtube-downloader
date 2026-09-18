@@ -83,13 +83,13 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 jobs: dict[str, dict] = {}
 jobs_lock = threading.Lock()
 
-# Clientes Innertube a probar, en orden (web = máxima calidad; android =
-# fallback que suele saltarse el bot-check en IPs de datacenter/VPS).
+# Clientes Innertube a probar, en orden (web = máxima calidad; android y tv =
+# fallbacks que suelen saltarse el bot-check en IPs de datacenter/VPS).
 # Ajustable sin código: YT_PLAYER_CLIENT="tv,android" (separados por comas).
 _PLAYER_ENV = os.environ.get("YT_PLAYER_CLIENT")
 PLAYER_CLIENTS: list[str] = (
     [c.strip() for c in _PLAYER_ENV.split(",") if c.strip()] if _PLAYER_ENV
-    else ["web", "android"]
+    else ["web", "android", "tv"]
 )
 
 
