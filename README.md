@@ -115,6 +115,22 @@ La web detecta `/api/*` en el mismo origen y pasa a **modo local**: descargas co
 
 > El servidor **no almacena nada**: cada archivo se borra del host en cuanto el navegador lo recibe (entrega one-shot; si cancelas a mitad, se conserva para reintentar).
 
+### Servidor en VPS (cookies obligatorias)
+
+Las IPs de datacenter disparan `Sign in to confirm you're not a bot`. Solución: sesión vía `YT_COOKIES_FILE`:
+
+```bash
+# 1. En tu máquina: exporta cookies CON SESIÓN INICIADA (idealmente cuenta
+#    secundaria) con "Get cookies.txt LOCALLY" y súbelas al VPS:
+scp cookies-file.txt usuario@yt.vpsrepo.com:/opt/yt/cookies.txt
+
+# 2. En el VPS:
+YT_COOKIES_FILE=/opt/yt/cookies.txt python server.py --host 0.0.0.0 --port 8000
+# log de arranque: "Cookies YouTube: /opt/yt/cookies.txt"
+```
+
+Sin la var, el server usa las cookies del navegador si las encuentra (solo sirve en tu máquina, no en un VPS sin navegador).
+
 ## 🧠 Cómo funciona la web
 
 ```text

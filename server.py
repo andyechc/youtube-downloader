@@ -83,6 +83,15 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 jobs: dict[str, dict] = {}
 jobs_lock = threading.Lock()
 
+# Sesión de YouTube vía archivo Netscape (YT_COOKIES_FILE=/ruta/cookies.txt).
+# En un VPS es casi obligatorio: las IPs de datacenter disparan el
+# "Sign in to confirm you're not a bot" sin sesión autenticada.
+_COOKIES_ENV = os.environ.get("YT_COOKIES_FILE")
+COOKIES_FILE: Path | None = Path(_COOKIES_ENV).expanduser() if _COOKIES_ENV else None
+if _COOKIES_ENV and (not COOKIES_FILE or not COOKIES_FILE.is_file()):
+    print(f"[server] ojo: YT_COOKIES_FILE no existe: {_COOKIES_ENV} (se ignora)", file=sys.stderr)
+    COOKIES_FILE = None
+
 
 def evict_old_jobs() -> None:
     """Expulsa jobs terminales viejos hasta MAX_JOBS (con sus archivos del
@@ -190,9 +199,15 @@ def base_opts() -> dict:
     if runtime:
         opts["js_runtimes"] = {runtime: {}}
         opts["remote_components"] = {"ejs:github"}
-    browser = find_browser_cookies()
-    if browser:
-        opts["cookiesfrombrowser"] = (browser,)
+    if COOKIES_FILE:
+        # Sesión explícita (imprescindible en VPS: las IPs de datacenter
+        # caen en "Sign in to confirm you're not a bot"). Tiene prioridad
+        # sobre las cookies automáticas del navegador.
+        opts["cookiefile"] = str(COOKIES_FILE)
+    else:
+        browser = find_browser_cookies()
+        if browser:
+            opts["cookiesfrombrowser"] = (browser,)
     return opts
 
 def resolve_quality(quality: str) -> str:
@@ -834,6 +849,7 @@ def run(host="127.0.0.1", port=8000):
     server_address = (host, port)
     httpd = ThreadedServer(server_address, Handler)
     log.info("YT Downloader Web — http://%s:%s (UI, API health, descargas en %s)", host, port, DEFAULT_DIR)
+    log.info("Cookies YouTube: %s", COOKIES_FILE if COOKIES_FILE else "auto (navegador)")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
