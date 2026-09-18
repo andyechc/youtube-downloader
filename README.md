@@ -91,19 +91,6 @@ python youtube-downloader.py "URL" -q 1080
 | `-o, --output` | Carpeta destino (default: `~/Downloads/YT`) |
 | `-a, --audio` | Solo audio en MP3 320kbps |
 | `-q, --quality` | `best`, `1080`, `720`, `480`, `360` (default: `best`) |
-| `-c, --cookies` | Archivo de cookies Netscape para YouTube (default: auto con cookies del navegador) |
-
-### Cookies de YouTube (`--cookies`)
-
-```bash
-python youtube-downloader.py "URL" -c cookies-file.txt
-```
-
-1. Instala la extensión **Get cookies.txt LOCALLY** en tu navegador y expórtalas ([guía yt-dlp](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookie)).
-2. Guarda el archivo como `cookies-file.txt` junto al script (el modo guiado lo detecta solo; si no, te pide la ruta o usa las cookies del navegador automáticamente).
-3. Sirven para videos con restricción de edad/región o rachas de `Sign in to confirm` — para eso expórtalas **con sesión iniciada**.
-
-> `cookies-file.txt` está en `.gitignore`: contiene identificadores semi-privados, nunca lo commitees.
 
 ### Servidor local (modo pro, recomendado)
 
@@ -115,18 +102,13 @@ La web detecta `/api/*` en el mismo origen y pasa a **modo local**: descargas co
 
 > El servidor **no almacena nada**: cada archivo se borra del host en cuanto el navegador lo recibe (entrega one-shot; si cancelas a mitad, se conserva para reintentar).
 
-### Servidor en VPS (cookies obligatorias)
+### Servidor en VPS (anti bot-check)
 
-Las IPs de datacenter disparan `Sign in to confirm you're not a bot`. Solución: sesión vía `YT_COOKIES_FILE`:
+Las IPs de datacenter disparan `Sign in to confirm you're not a bot`. El proyecto pide los clientes Innertube en orden `web` (máxima calidad) → `android` (suele saltarse el bloqueo), así que en el VPS reintenta solo con el cliente móvil. Si un caso se resiste, fuerza otros clientes sin tocar código:
 
 ```bash
-# 1. En tu máquina: exporta cookies CON SESIÓN INICIADA (idealmente cuenta
-#    secundaria) con "Get cookies.txt LOCALLY" y súbelas al VPS:
-scp cookies-file.txt usuario@yt.vpsrepo.com:/opt/yt/cookies.txt
-
-# 2. En el VPS:
-YT_COOKIES_FILE=/opt/yt/cookies.txt python server.py --host 0.0.0.0 --port 8000
-# log de arranque: "Cookies YouTube: /opt/yt/cookies.txt"
+YT_PLAYER_CLIENT="tv,android" python server.py --host 0.0.0.0 --port 8000
+# log de arranque: "Player clients YouTube: tv,android"
 ```
 
 Sin la var, el server usa las cookies del navegador si las encuentra (solo sirve en tu máquina, no en un VPS sin navegador).

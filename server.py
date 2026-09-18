@@ -83,14 +83,14 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 jobs: dict[str, dict] = {}
 jobs_lock = threading.Lock()
 
-# Sesión de YouTube vía archivo Netscape (YT_COOKIES_FILE=/ruta/cookies.txt).
-# En un VPS es casi obligatorio: las IPs de datacenter disparan el
-# "Sign in to confirm you're not a bot" sin sesión autenticada.
-_COOKIES_ENV = os.environ.get("YT_COOKIES_FILE")
-COOKIES_FILE: Path | None = Path(_COOKIES_ENV).expanduser() if _COOKIES_ENV else None
-if _COOKIES_ENV and (not COOKIES_FILE or not COOKIES_FILE.is_file()):
-    print(f"[server] ojo: YT_COOKIES_FILE no existe: {_COOKIES_ENV} (se ignora)", file=sys.stderr)
-    COOKIES_FILE = None
+# Clientes Innertube a probar, en orden (web = máxima calidad; android =
+# fallback que suele saltarse el bot-check en IPs de datacenter/VPS).
+# Ajustable sin código: YT_PLAYER_CLIENT="tv,android" (separados por comas).
+_PLAYER_ENV = os.environ.get("YT_PLAYER_CLIENT")
+PLAYER_CLIENTS: list[str] = (
+    [c.strip() for c in _PLAYER_ENV.split(",") if c.strip()] if _PLAYER_ENV
+    else ["web", "android"]
+)
 
 
 def evict_old_jobs() -> None:
@@ -199,15 +199,10 @@ def base_opts() -> dict:
     if runtime:
         opts["js_runtimes"] = {runtime: {}}
         opts["remote_components"] = {"ejs:github"}
-    if COOKIES_FILE:
-        # Sesión explícita (imprescindible en VPS: las IPs de datacenter
-        # caen en "Sign in to confirm you're not a bot"). Tiene prioridad
-        # sobre las cookies automáticas del navegador.
-        opts["cookiefile"] = str(COOKIES_FILE)
-    else:
-        browser = find_browser_cookies()
-        if browser:
-            opts["cookiesfrombrowser"] = (browser,)
+    opts["extractor_args"] = {"youtube": {"player_client": list(PLAYER_CLIENTS)}}
+    browser = find_browser_cookies()
+    if browser:
+        opts["cookiesfrombrowser"] = (browser,)
     return opts
 
 def resolve_quality(quality: str) -> str:
@@ -849,7 +844,7 @@ def run(host="127.0.0.1", port=8000):
     server_address = (host, port)
     httpd = ThreadedServer(server_address, Handler)
     log.info("YT Downloader Web — http://%s:%s (UI, API health, descargas en %s)", host, port, DEFAULT_DIR)
-    log.info("Cookies YouTube: %s", COOKIES_FILE if COOKIES_FILE else "auto (navegador)")
+    log.info("Player clients YouTube: %s", ",".join(PLAYER_CLIENTS))
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
