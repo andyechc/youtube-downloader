@@ -104,7 +104,7 @@ La web detecta `/api/*` en el mismo origen y pasa a **modo local**: descargas co
 
 ### Servidor en VPS (anti bot-check)
 
-Las IPs de datacenter disparan `Sign in to confirm you're not a bot`. El proyecto pide los clientes Innertube en orden `web` (máxima calidad) → `android` (suele saltarse el bloqueo), así que en el VPS reintenta solo con el cliente móvil. Si un caso se resiste, fuerza otros clientes sin tocar código:
+Las IPs de datacenter disparan `Sign in to confirm you're not a bot`. El proyecto pide los clientes Innertube en orden `web` (máxima calidad) → `web_embedded` (escalera completa hasta 4K cuando YouTube fuerza SABR sin URLs en `web`) → `android` → `tv`, así que casi todo se resuelve solo. Si un caso se resiste, fuerza otros clientes sin tocar código:
 
 ```bash
 YT_PLAYER_CLIENT="tv,android" python server.py --host 0.0.0.0 --port 8000

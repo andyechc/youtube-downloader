@@ -25,9 +25,10 @@ except ImportError:  # Windows
 
 DEFAULT_DIR = Path.home() / "Downloads" / "YT"
 QUALITIES = ["best", "1080", "720", "480", "360"]
-# Clientes Innertube en orden: web = máxima calidad; android y tv =
-# fallbacks que suelen saltarse el bot-check en IPs de datacenter/VPS.
-PLAYER_CLIENTS = ["web", "android", "tv"]
+# Clientes Innertube en orden: web = máxima calidad; web_embedded = escalera
+# completa (hasta 4K) cuando YouTube fuerza SABR sin URLs en web; android y tv
+# = últimos recursos (solo 360p y más throttle).
+PLAYER_CLIENTS = ["web", "web_embedded", "android", "tv"]
 
 BOLD = "\033[1m"
 CYAN = "\033[36m"
