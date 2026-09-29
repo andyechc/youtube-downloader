@@ -172,6 +172,12 @@ def build_opts(url: str, out_dir: Path, quality: str, audio: bool) -> dict:
     opts["concurrent_fragment_downloads"] = 8
     opts["buffersize"] = 1024 * 16
     opts["socket_timeout"] = 30
+    opts["retries"] = 10
+    opts["retry_sleep"] = 5
+    # Descarga por rangos de 1 MB: cada chunk verifica su longitud y reintenta
+    # el tramo cortado. Mitiga el burst-then-EOF del throttle (el servidor
+    # cierra tras la rafaga inicial y el archivo parece "100%").
+    opts["http_chunk_size"] = 1024 * 1024
     opts["extractor_args"] = {"youtube": {"player_client": list(PLAYER_CLIENTS)}}
     if audio:
         opts.update(
