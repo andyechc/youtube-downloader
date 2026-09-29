@@ -165,6 +165,40 @@ def human_size(num: int | None) -> str:
 def fmt_duration(secs: int | None) -> str:
     if not secs:
         return "?"
+
+
+MIN_SIZE_RATIO = 0.3
+
+def check_truncation(info, files, quality, audio):
+    """Detecta descargas truncadas por throttle (llega el 1% y yt-dlp lo da
+    por bueno). Devuelve (real, esperado, etiqueta) o None."""
+    if not info or not files:
+        return None
+
+    def actual(f):
+        try:
+            return Path(f).stat().st_size
+        except OSError:
+            return 0
+
+    if info.get("_type") == "playlist":
+        entries = [e for e in (info.get("entries") or []) if e]
+        if len(entries) != len(files):
+            return None  # no mapeable 1:1, no validar
+        for e, f in zip(entries, files):
+            exp, _ = estimate_size(e, quality, audio)
+            act = actual(f)
+            if exp and exp > 0 and act < MIN_SIZE_RATIO * exp:
+                return (act, exp, (e.get("title") or f)[:60])
+        return None
+
+    if len(files) != 1:
+        return None
+    exp, _ = estimate_size(info, quality, audio)
+    act = actual(files[0])
+    if exp and exp > 0 and act < MIN_SIZE_RATIO * exp:
+        return (act, exp, (info.get("title") or files[0])[:60])
+    return None
     m, s = divmod(int(secs), 60)
     h, m = divmod(m, 60)
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
@@ -407,8 +441,14 @@ def download_worker(job_id: str):
     opts = build_opts(url, out_dir, quality, audio)
     opts["progress_hooks"] = [hook]
     # also capture info for title
+    pre_info = None
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
+            try:
+                # Metadata para validar al final que no llego truncado
+                pre_info = ydl.extract_info(url, download=False)
+            except Exception as e:
+                log.debug("job %s sin metadata previa: %s", job_id, e)
             # need to handle cancellation
             ydl.download([url])
             if not tracked_files:
@@ -449,11 +489,25 @@ def download_worker(job_id: str):
                 if c.is_file() and time.time() - c.stat().st_mtime < 600:
                     files.append(str(c))
                     break
+        trunc = check_truncation(pre_info, files, quality, audio)
+        trunc_files = list(files) if trunc else []
         with jobs_lock:
             j = jobs.get(job_id)
             if j:
                 if j.get("cancelled"):
                     j["status"] = "cancelled"
+                elif trunc:
+                    act, exp, label = trunc
+                    j["status"] = "error"
+                    j["error"] = (
+                        "Descarga truncada en «" + label + "»: llegaron "
+                        + human_size(act) + " de ~" + human_size(exp)
+                        + " esperados. YouTube limitó la conexión; "
+                        + "reintenta en unos minutos."
+                    )
+                    j["progress"] = 0
+                    j["files"] = []
+                    log.warning("job %s truncado: %s de %s (%s)", job_id, human_size(act), human_size(exp), label)
                 else:
                     j["status"] = "done"
                     j["progress"] = 100
@@ -465,6 +519,11 @@ def download_worker(job_id: str):
                     if files:
                         j["result_file"] = files[0]
                     log.info("job %s listo: %s", job_id, files[0] if files else "(sin archivos)")
+        for t in trunc_files:
+            try:
+                Path(t).unlink(missing_ok=True)
+            except OSError:
+                pass
     except yt_dlp.utils.DownloadCancelled:
         with jobs_lock:
             j = jobs.get(job_id)
