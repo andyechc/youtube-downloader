@@ -236,6 +236,12 @@
           <p class="pv-note">Se guarda en tu carpeta <strong>Descargas</strong>. Nada se sube a ningún servidor.</p>
         </div>
       </div>
+      <div class="playlist" id="playlistBox" hidden>
+        <div class="playlist-head">
+          <h4>Videos de la playlist · <span id="plTotal">—</span></h4>
+        </div>
+        <div class="pl-list" id="plList"></div>
+      </div>
     </section>
 
     <!-- PROGRESS -->
@@ -263,6 +269,7 @@
       <p class="prog-file"><span aria-hidden="true">▸</span> <span id="progFile">Preparando…</span></p>
       <div class="prog-done" id="progDoneBox" hidden>
         <p class="done-title">¡Listo! Revisa tu carpeta Descargas.</p>
+        <div class="pl-save-list" id="plSaveList" hidden></div>
         <div class="prog-done-actions">
           <a class="btn primary" id="btnSaveAgain" href="#" download>Guardar archivo</a>
           <button class="btn ghost" id="btnOther" type="button">Descargar otro</button>
@@ -309,7 +316,7 @@
             <tr><th scope="row">Destino</th><td>Carpeta Descargas del navegador.</td><td>Carpeta que elijas (<code>~/Downloads/YT</code>).</td></tr>
             <tr><th scope="row">Video</th><td>MP4 hasta 1080p.</td><td>Máxima calidad + merge + 4K si existe.</td></tr>
             <tr><th scope="row">Audio</th><td>M4A calidad original.</td><td>MP3 320kbps con ffmpeg.</td></tr>
-            <tr><th scope="row">Playlists</th><td>Solo el video del enlace.</td><td>Playlists completas.</td></tr>
+            <tr><th scope="row">Playlists</th><td>Un video (navegador) · completa item por item (modo local).</td><td>Playlists completas.</td></tr>
             <tr><th scope="row">Sin internet del servidor</th><td><span class="tag ok">Sí, es estática</span></td><td><span class="tag ok">Sí, es local</span></td></tr>
           </tbody>
         </table>
@@ -335,6 +342,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <!-- Bump ?v=N en style.css/app.js con cada cambio: evita JS viejo cacheado -->
-  <script src="app.js?v=5" defer></script>
+  <script src="app.js?v=6" defer></script>
 </body>
 </html>

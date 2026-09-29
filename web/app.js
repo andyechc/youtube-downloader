@@ -180,6 +180,10 @@ const btnCancel = $('#btnCancel');
 const progDoneBox = $('#progDoneBox');
 const btnSaveAgain = $('#btnSaveAgain');
 const btnOther = $('#btnOther');
+const playlistBox = $('#playlistBox');
+const plList = $('#plList');
+const plTotal = $('#plTotal');
+const plSaveList = $('#plSaveList');
 
 let current = null; // { videoId, pageUrl, streams, picked, kind, quality, filename }
 let aborter = null;
@@ -628,6 +632,10 @@ btnClear.addEventListener('click', () => {
   hideAlert();
   previewCard.hidden = true;
   progressCard.hidden = true;
+  playlistBox.hidden = true;
+  plSaveList.hidden = true;
+  plSaveList.innerHTML = '';
+  btnSaveAgain.style.display = '';
   current = null;
   urlInput.focus();
 });
@@ -672,32 +680,15 @@ btnSaveAgain.addEventListener('click', async (e) => {
   const href = btnSaveAgain.getAttribute('href') || '';
   if (!href || href === '#' || href.startsWith('blob:')) return; // nativo
   e.preventDefault();
-  const old = btnSaveAgain.textContent;
-  btnSaveAgain.textContent = 'Trayendo archivo…';
-  try {
-    const res = await fetch(href);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || `Error ${res.status}`);
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = btnSaveAgain.download || 'descarga';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
-    toast('Archivo guardado ✓');
-  } catch (err) {
-    showAlert(`No se pudo traer el archivo: ${err.message}`);
-  } finally {
-    btnSaveAgain.textContent = old;
-  }
+  await saveServerFile(serverJobId, 0, btnSaveAgain.download || 'descarga', btnSaveAgain);
 });
-btnOther.addEventListener('click', () => {  progressCard.hidden = true;
+btnOther.addEventListener('click', () => {
+  progressCard.hidden = true;
   previewCard.hidden = true;
+  playlistBox.hidden = true;
+  plSaveList.hidden = true;
+  plSaveList.innerHTML = '';
+  btnSaveAgain.style.display = '';
   urlInput.value = '';
   btnClear.hidden = true;
   current = null;
@@ -749,8 +740,10 @@ async function doServerPreview(raw) {
       pvViews.textContent = `${info.count} videos`;
       pvDate.textContent = '';
       pvDuration.textContent = `${info.count} vídeos`;
-      pvDesc.textContent = (info.description || 'Playlist de YouTube').slice(0, 280);
+      pvDesc.textContent = 'Se descargará completa; luego guardas cada video uno por uno.';
       pvSize.textContent = info.total_size_str || '—';
+      btnOpenYT.href = raw;
+      renderPlaylistPreview(info.entries || []);
     } else {
       pvThumb.src = info.thumbnail || '';
       pvTitle.textContent = info.title || 'Sin título';
@@ -764,6 +757,7 @@ async function doServerPreview(raw) {
     }
     pvTypeBadge.textContent = kind === 'audio' ? 'AUDIO · MP3 320' : 'VIDEO · MAX';
     pvQualityBadge.textContent = qualityLabel(quality);
+    if (info.type !== 'playlist') playlistBox.hidden = true;
     current = { pageUrl: raw, serverInfo: info, kind, quality, filename: null };
     previewCard.hidden = false;
     previewCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -782,11 +776,105 @@ async function doDownload(evt) {
   return doDownloadBrowser(evt);
 }
 
+function renderPlaylistPreview(entries) {
+  plList.innerHTML = '';
+  plTotal.textContent = `${entries.length} mostrados`;
+  entries.forEach((e) => {
+    const div = document.createElement('div');
+    div.className = 'pl-item';
+    const name = document.createElement('div');
+    name.className = 'pl-title';
+    name.textContent = e.title || 'Sin título';
+    const sub = document.createElement('div');
+    sub.className = 'pl-sub';
+    sub.textContent = `${e.channel || '?'} · ${e.duration_str || '—'} · ${e.size_str || '—'}`;
+    const meta = document.createElement('div');
+    meta.append(name, sub);
+    const th = document.createElement('div');
+    th.className = 'pl-thumb';
+    if (e.thumbnail) {
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.src = e.thumbnail;
+      img.alt = '';
+      th.appendChild(img);
+    }
+    const dur = document.createElement('span');
+    dur.textContent = e.duration_str || '—';
+    th.appendChild(dur);
+    div.append(th, meta);
+    plList.appendChild(div);
+  });
+  playlistBox.hidden = entries.length === 0;
+}
+
+/* Trae un archivo del job del servidor con errores visibles. */
+async function saveServerFile(jobId, idx, filename, btn) {
+  const old = btn ? btn.textContent : '';
+  if (btn) btn.textContent = 'Trayendo…';
+  try {
+    const res = await fetch(`/api/file/${encodeURIComponent(jobId)}?idx=${idx}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Error ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'descarga';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+    toast('Archivo guardado ✓');
+    return true;
+  } catch (err) {
+    showAlert(`No se pudo traer el archivo: ${err.message}`);
+    return false;
+  } finally {
+    if (btn) btn.textContent = old;
+  }
+}
+
+function renderPlaylistSaveList(jobId, files) {
+  plSaveList.innerHTML = '';
+  const items = (files || []).map((f, i) => ({ f, i })).filter(({ f }) => f);
+  items.forEach(({ f, i }) => {
+    const name = String(f).split('/').pop();
+    const row = document.createElement('div');
+    row.className = 'pl-save';
+    const t = document.createElement('span');
+    t.className = 't';
+    t.textContent = name;
+    t.title = name;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn tiny primary';
+    b.textContent = 'Guardar';
+    b.addEventListener('click', async () => {
+      const ok = await saveServerFile(jobId, i, name, b);
+      if (ok) {
+        row.classList.add('done');
+        b.textContent = 'Guardado ✓';
+        b.disabled = true;
+      }
+    });
+    row.append(t, b);
+    plSaveList.appendChild(row);
+  });
+  plSaveList.hidden = items.length === 0;
+  return items.length;
+}
+
 async function doServerDownload() {
   hideAlert();
   btnDownload.disabled = true;
   progressCard.hidden = false;
   progDoneBox.hidden = true;
+  plSaveList.hidden = true;
+  plSaveList.innerHTML = '';
+  btnSaveAgain.style.display = '';
   progressLabel.textContent = 'Descargando…';
   progFile.textContent = current.serverInfo.title || current.pageUrl;
   setProgress(0, 0, null, 0, NaN);
@@ -831,7 +919,8 @@ async function pollServerJob() {
       clearInterval(pollTimer);
       btnDownload.disabled = false;
       if (job.status === 'done') {
-        if (!job.files || !job.files.length) {
+        const usable = (job.files || []).filter((f) => f);
+        if (!usable.length) {
           progressLabel.textContent = 'Error';
           progEta.textContent = 'sin archivos';
           showAlert('Terminó sin archivos que entregar (el destino ya existía o falló el merge). Borra duplicados en tu carpeta y reintenta.');
@@ -840,15 +929,24 @@ async function pollServerJob() {
         setProgress(100, job.total_bytes || job.downloaded_bytes || 0, job.total_bytes || job.downloaded_bytes || null, 0, 0);
         progressLabel.textContent = 'Completado';
         progEta.textContent = '¡listo!';
-        const fileUrl = `/api/file/${serverJobId}`;
-        btnSaveAgain.href = fileUrl;
-        const m = /([^/]+)$/.exec(job.files?.[0] || '');
-        btnSaveAgain.download = m ? m[1] : 'descarga';
-        // Sin auto-clic: la entrega es one-shot y un clic programático que el
-        // navegador bloquee/descarte la consumiría igual (→ 410 fantasma).
-        // El usuario la dispara con gesto explícito en "Guardar archivo".
         progDoneBox.hidden = false;
-        showAlert('Archivo listo. Pulsa «Guardar archivo» para traerlo a tu navegador.', true);
+        if (current?.serverInfo?.type === 'playlist') {
+          // Playlist: un botón Guardar por video (entrega one-shot por índice).
+          btnSaveAgain.style.display = 'none';
+          const n = renderPlaylistSaveList(serverJobId, job.files);
+          showAlert(`Playlist lista: guarda cada video con su botón (${n} disponibles).`, true);
+        } else {
+          btnSaveAgain.style.display = '';
+          plSaveList.hidden = true;
+          const fileUrl = `/api/file/${serverJobId}`;
+          btnSaveAgain.href = fileUrl;
+          const m = /([^/]+)$/.exec(job.files?.[0] || '');
+          btnSaveAgain.download = m ? m[1] : 'descarga';
+          // Sin auto-clic: la entrega es one-shot y un clic programático que el
+          // navegador bloquee/descarte la consumiría igual (→ 410 fantasma).
+          // El usuario la dispara con gesto explícito en "Guardar archivo".
+          showAlert('Archivo listo. Pulsa «Guardar archivo» para traerlo a tu navegador.', true);
+        }
         toast('¡Listo para guardar! ↓', 3200);
       } else if (job.status === 'error') {
         progressLabel.textContent = 'Error';

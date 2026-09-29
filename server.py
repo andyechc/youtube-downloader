@@ -105,6 +105,8 @@ def evict_old_jobs() -> None:
             break
         jobs.pop(j["id"], None)
         for s in j.get("files") or []:
+            if not s:
+                continue
             try:
                 Path(s).unlink(missing_ok=True)
             except OSError:
@@ -582,7 +584,8 @@ class Handler(BaseHTTPRequestHandler):
                 j = jobs.get(job_id)
             if not j:
                 return self.send_json({"error": "archivo no disponible"}, status=404)
-            if not j.get("files"):
+            remaining = [f for f in (j.get("files") or []) if f]
+            if not remaining:
                 if j.get("delivered"):
                     return self.send_json({"error": "archivo ya entregado y eliminado del servidor"}, status=410)
                 return self.send_json({"error": "archivo no disponible"}, status=404)
@@ -594,6 +597,8 @@ class Handler(BaseHTTPRequestHandler):
             files = j.get("files") or []
             if idx < 0 or idx >= len(files):
                 return self.send_json({"error": "indice fuera de rango"}, status=404)
+            if files[idx] is None:
+                return self.send_json({"error": "ese archivo ya fue entregado y eliminado"}, status=410)
             fpath = Path(files[idx])
             # Anti path-traversal: el archivo debe vivir dentro del out_dir
             # del propio job (nada de /etc/passwd aunque j["files"] se manipule).
@@ -629,19 +634,22 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({"error": str(e)}, status=500)
                 except (BrokenPipeError, ConnectionResetError):
                     return
-            # Entrega completa: el host no almacena nada (one-shot).
+            # Entrega one-shot POR ÍNDICE: el host no almacena nada.
+            # Solo se borra el archivo servido; el resto sigue disponible.
             with jobs_lock:
                 jj = jobs.get(job_id)
-                served = list(jj.get("files") or []) if jj else []
-                if jj:
-                    jj["files"] = []
-                    jj["delivered"] = True
-            for s in served:
+                served = None
+                if jj and (jj.get("files") or [])[idx] is not None:
+                    served = jj["files"][idx]
+                    jj["files"][idx] = None
+                    if not any(jj["files"]):
+                        jj["delivered"] = True
+            if served:
                 try:
-                    Path(s).unlink(missing_ok=True)
+                    Path(served).unlink(missing_ok=True)
                 except OSError:
                     pass
-            log.info("job %s entregado y borrado del host (%d archivo(s))", job_id, len(served))
+                log.info("job %s entregado idx %d y borrado del host", job_id, idx)
             return
         if path == "/api/list_files":
             # list files in downloads folder
@@ -823,6 +831,8 @@ class Handler(BaseHTTPRequestHandler):
             if job is None:
                 return self.send_json({"error": "no encontrado"}, status=404)
             for s in leftovers:
+                if not s:
+                    continue
                 try:
                     Path(s).unlink(missing_ok=True)
                 except OSError:

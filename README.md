@@ -27,7 +27,7 @@ Web local (sin cuentas, sin anuncios) + CLI en Python con `yt-dlp` para máxima 
 | 📥 Destino | Carpeta **Descargas** del navegador | Carpeta que elijas (`~/Downloads/YT`) |
 | 🎬 Video | MP4 con audio, hasta 1080p | Máxima calidad + merge + 4K si existe |
 | 🎵 Audio | M4A calidad original | **MP3 320kbps** (ffmpeg) |
-| 📃 Playlists | Un video cada vez | **Completas** |
+| 📃 Playlists | Un video (navegador) · completa item por item (modo local) | **Completas** |
 | 🔌 Instalación | Nada | Binario o `pip install -r requirements.txt` |
 
 > La web usa la **misma lógica del CLI** (`QUALITIES`, resolución por altura, mejor stream muxed) portada a JavaScript. Si además ejecutas `python server.py` en local, la web lo detecta sola y desbloquea máxima calidad + MP3 + playlists (**modo local**).
