@@ -666,7 +666,7 @@ btnCancel.addEventListener('click', () => {
     toast('Descarga cancelada');
   } else aborter?.abort('cancelled');
 });
-/* "Guardar de nuevo" con errores VISIBLES: si el servidor ya entregó y borró
+/* "Guardar archivo" con errores VISIBLES: si el servidor ya entregó y borró
  * (410) o algo falla, se muestra en vez de descargar un JSON misterioso. */
 btnSaveAgain.addEventListener('click', async (e) => {
   const href = btnSaveAgain.getAttribute('href') || '';
@@ -844,15 +844,12 @@ async function pollServerJob() {
         btnSaveAgain.href = fileUrl;
         const m = /([^/]+)$/.exec(job.files?.[0] || '');
         btnSaveAgain.download = m ? m[1] : 'descarga';
-        const a = document.createElement('a');
-        a.href = fileUrl;
-        if (m) a.download = m[1];
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        // Sin auto-clic: la entrega es one-shot y un clic programático que el
+        // navegador bloquee/descarte la consumiría igual (→ 410 fantasma).
+        // El usuario la dispara con gesto explícito en "Guardar archivo".
         progDoneBox.hidden = false;
-        showAlert('Descarga automática iniciada. Si no te llegó nada, usa «Guardar de nuevo».', true);
-        toast('¡Descarga completada! ✓', 3200);
+        showAlert('Archivo listo. Pulsa «Guardar archivo» para traerlo a tu navegador.', true);
+        toast('¡Listo para guardar! ↓', 3200);
       } else if (job.status === 'error') {
         progressLabel.textContent = 'Error';
         showAlert(job.error || 'Error en la descarga');
