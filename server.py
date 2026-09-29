@@ -455,48 +455,78 @@ def download_worker(job_id: str):
                 pre_info = ydl.extract_info(url, download=False)
             except Exception as e:
                 log.debug("job %s sin metadata previa: %s", job_id, e)
-            # need to handle cancellation
-            ydl.download([url])
-            if not tracked_files:
-                # yt-dlp omite la descarga si el destino ya existe ("has already
-                # been downloaded"). Como el host no debe almacenar nada, ese
-                # existente se reutiliza como resultado (se sirve y se borra).
-                try:
-                    info = ydl.extract_info(url, download=False)
-                except Exception:
-                    info = None
-                if info and info.get("_type") != "playlist":
-                    base = Path(ydl.prepare_filename(info))
-                    media = (".mp4", ".mkv", ".webm", ".mp3", ".m4a", ".opus", ".wav")
-                    for p in out_dir.iterdir():
-                        if p.is_file() and p.stem == base.stem and p.suffix.lower() in media:
-                            tracked_files.append(str(p))
-                            log.info("job %s reutiliza existente: %s", job_id, p)
+            MAX_ATTEMPTS = 3
+            RETRY_WAIT = 10
+            for attempt in range(1, MAX_ATTEMPTS + 1):
+                tracked_files.clear()
+                # need to handle cancellation
+                ydl.download([url])
+                if not tracked_files:
+                    # yt-dlp omite la descarga si el destino ya existe ("has already
+                    # been downloaded"). Como el host no debe almacenar nada, ese
+                    # existente se reutiliza como resultado (se sirve y se borra).
+                    try:
+                        info = ydl.extract_info(url, download=False)
+                    except Exception:
+                        info = None
+                    if info and info.get("_type") != "playlist":
+                        base = Path(ydl.prepare_filename(info))
+                        media = (".mp4", ".mkv", ".webm", ".mp3", ".m4a", ".opus", ".wav")
+                        for p in out_dir.iterdir():
+                            if p.is_file() and p.stem == base.stem and p.suffix.lower() in media:
+                                tracked_files.append(str(p))
+                                log.info("job %s reutiliza existente: %s", job_id, p)
+                                break
+                # After download, enumerate new files
+                files = []
+                last_file = None
+                for f in tracked_files:
+                    # audio conversion changes extension to mp3
+                    p = Path(f)
+                    # check if mp3 exists instead
+                    if audio and p.suffix != ".mp3":
+                        mp3_guess = p.with_suffix(".mp3")
+                        if mp3_guess.exists():
+                            p = mp3_guess
+                    if p.exists():
+                        files.append(str(p))
+                        last_file = str(p)
+                # fallback: list dir by recent mtime if hook missed
+                if not files:
+                    # list newest files in out_dir modified within last 5 minutes
+                    candidates = sorted(out_dir.iterdir(), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True)
+                    for c in candidates[:5]:
+                        if c.is_file() and time.time() - c.stat().st_mtime < 600:
+                            files.append(str(c))
                             break
-        # After download, enumerate new files
-        files = []
-        last_file: str | None = None
-        for f in tracked_files:
-            # audio conversion changes extension to mp3
-            p = Path(f)
-            # check if mp3 exists instead
-            if audio and p.suffix != ".mp3":
-                mp3_guess = p.with_suffix(".mp3")
-                if mp3_guess.exists():
-                    p = mp3_guess
-            if p.exists():
-                files.append(str(p))
-                last_file = str(p)
-        # fallback: list dir by recent mtime if hook missed
-        if not files:
-            # list newest files in out_dir modified within last 5 minutes
-            candidates = sorted(out_dir.iterdir(), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True)
-            for c in candidates[:5]:
-                if c.is_file() and time.time() - c.stat().st_mtime < 600:
-                    files.append(str(c))
+                trunc = check_truncation(pre_info, files, quality, audio)
+                trunc_files = list(files) if trunc else []
+                if not trunc:
                     break
-        trunc = check_truncation(pre_info, files, quality, audio)
-        trunc_files = list(files) if trunc else []
+                with jobs_lock:
+                    if (jobs.get(job_id) or {}).get("cancelled"):
+                        break
+                if attempt >= MAX_ATTEMPTS:
+                    break
+                for t in trunc_files:
+                    try:
+                        Path(t).unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                log.warning(
+                    "job %s truncado (%s de %s), reintento %d/%d en %ds",
+                    job_id, human_size(trunc[0]), human_size(trunc[1]),
+                    attempt + 1, MAX_ATTEMPTS, RETRY_WAIT,
+                )
+                files = []
+                last_file = None
+                trunc_files = []
+                with jobs_lock:
+                    jj = jobs.get(job_id)
+                    if jj:
+                        jj["status"] = "downloading"
+                        jj["progress"] = 0
+                time.sleep(RETRY_WAIT)
         with jobs_lock:
             j = jobs.get(job_id)
             if j:
