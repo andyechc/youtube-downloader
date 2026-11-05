@@ -113,6 +113,18 @@ YT_PLAYER_CLIENT="tv,android" python server.py --host 0.0.0.0 --port 8000
 
 Sin la var, el server usa las cookies del navegador si las encuentra (solo sirve en tu máquina, no en un VPS sin navegador).
 
+### Web hosteada (p. ej. GitHub Pages + tu servidor)
+
+La carpeta `web/` es 100% estática: súbela a Pages, Netlify o cualquier hosting. Al abrirla, la píldora del header muestra el modo:
+
+| Píldora | Qué pasa |
+|---------|----------|
+| 🟢 `Local` | Detectó `server.py` en el mismo origen. Todo funciona. |
+| 🔵 `Servidor` | Usa la API remota que configuraste (púlsala para poner/quitar la URL). |
+| 🟡 `Navegador` | Sin servidor: resuelve directo con instancias públicas (pueden fallar). |
+
+Para el modo `Servidor`: en tu VPS expón `server.py` por HTTPS (p. ej. `https://yt.tudominio.com` con nginx), abre la web hosteada, pulsa la píldora y pega esa URL. Queda guardada en el navegador. Ojo: si la web va por `https`, el servidor también debe ir por `https` (el navegador bloquea contenido mixto).
+
 ## 🧠 Cómo funciona la web
 
 ```text

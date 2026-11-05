@@ -154,27 +154,77 @@ const btnDownload = $('#btnDownload');
 let current = null; // { videoId?, pageUrl, streams?, picked?, kind, quality, filename?, serverInfo? }
 let aborter = null;
 
-/* Modo servidor local: si la web se sirve desde `python server.py`
- * (mismo origen con /api/*), se usa para máxima calidad y playlists. */
+/* Dónde se resuelve: mismo origen (server.py local), servidor remoto
+ * configurado (p. ej. la web hosteada en GitHub Pages + API en tu VPS),
+ * o directo en el navegador (Piped/Invidious). */
+const store = {
+  get(k) { try { return localStorage.getItem(k) || ''; } catch { return ''; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+const LS_API = 'yt_api_base';
+let apiBase = store.get(LS_API).replace(/\/+$/, '');
+const api = (p) => (apiBase || '') + p;
+
 let localServer = false;
 let serverJobId = null;
 let pollTimer = null;
 
-async function detectLocalServer() {
-  if (!/^https?:$/.test(location.protocol)) return;
+const modePill = $('#modePill');
+const modeLabel = $('#modeLabel');
+const serverPop = $('#serverPop');
+const serverUrl = $('#serverUrl');
+const serverErr = $('#serverErr');
+const btnServerSave = $('#btnServerSave');
+const btnServerClear = $('#btnServerClear');
+
+function setMode(mode) {
+  // local: server.py en el mismo origen · remote: servidor configurado · browser: directo
+  modePill.classList.remove('is-local', 'is-remote', 'is-browser');
+  modePill.classList.add('is-' + mode);
+  modeLabel.textContent = mode === 'local' ? 'Local' : mode === 'remote' ? 'Servidor' : 'Navegador';
+}
+
+async function healthCheck(base, ms = 2500) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort('timeout'), ms);
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort('timeout'), 1500);
-    const res = await fetch('/api/health', { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+    const res = await fetch((base || '') + '/api/health', { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+    if (!res.ok) return false;
+    const data = await res.json().catch(() => ({}));
+    return !!(data && data.ok !== false);
+  } catch {
+    return false;
+  } finally {
     clearTimeout(t);
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
-      if (data && data.ok !== false) {
-        localServer = true;
-        return;
-      }
-    }
-  } catch { /* sin servidor: modo navegador */ }
+  }
+}
+
+async function detectMode() {
+  if (/^https?:$/.test(location.protocol) && await healthCheck('')) {
+    apiBase = '';
+    localServer = true;
+    setMode('local');
+    return;
+  }
+  if (apiBase && await healthCheck(apiBase)) {
+    localServer = true;
+    setMode('remote');
+    return;
+  }
+  localServer = false;
+  setMode('browser');
+}
+
+function toggleServerPop(force) {
+  const open = force ?? serverPop.hidden;
+  serverPop.hidden = !open;
+  modePill.setAttribute('aria-expanded', String(open));
+  if (open) {
+    serverErr.hidden = true;
+    serverUrl.value = apiBase;
+    setTimeout(() => serverUrl.focus(), 50);
+  }
 }
 
 function selectedQuality() {
@@ -527,7 +577,7 @@ async function doServerFlow(raw) {
   current = null;
 
   try {
-    const res = await fetch('/api/preview', {
+    const res = await fetch(api('/api/preview'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: raw, quality, audio: kind === 'audio' }),
@@ -583,7 +633,7 @@ async function doServerDownload() {
   progressCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
   try {
-    const res = await fetch('/api/download', {
+    const res = await fetch(api('/api/download'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: current.pageUrl, quality: current.quality, audio: current.kind === 'audio' }),
@@ -603,7 +653,7 @@ async function doServerDownload() {
 
 async function pollServerJob() {
   try {
-    const res = await fetch(`/api/progress?jobId=${encodeURIComponent(serverJobId)}`);
+    const res = await fetch(api(`/api/progress?jobId=${encodeURIComponent(serverJobId)}`));
     const job = await res.json();
     if (!res.ok) throw new Error(job.error || 'job no encontrado');
     setProgress(
@@ -668,7 +718,7 @@ async function saveServerFile(jobId, idx, filename, btn) {
   const old = btn ? btn.textContent : '';
   if (btn) btn.textContent = 'Trayendo…';
   try {
-    const res = await fetch(`/api/file/${encodeURIComponent(jobId)}?idx=${idx}`);
+    const res = await fetch(api(`/api/file/${encodeURIComponent(jobId)}?idx=${idx}`));
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || `Error ${res.status}`);
@@ -726,6 +776,53 @@ function renderPlaylistSaveList(jobId, files) {
 /* Eventos                                                             */
 /* ------------------------------------------------------------------ */
 form.addEventListener('submit', startDownload);
+/* Servidor remoto (píldora del header) */
+modePill.addEventListener('click', () => toggleServerPop());
+document.addEventListener('click', (e) => {
+  if (!serverPop.hidden && !e.target.closest('.server-wrap')) toggleServerPop(false);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !serverPop.hidden) { toggleServerPop(false); modePill.focus(); }
+});
+btnServerSave.addEventListener('click', async () => {
+  const v = serverUrl.value.trim().replace(/\/+$/, '');
+  serverErr.hidden = true;
+  if (!v) {
+    store.del(LS_API);
+    apiBase = '';
+    await detectMode();
+    toggleServerPop(false);
+    toast('Modo automático');
+    return;
+  }
+  let base = /^https?:\/\//i.test(v) ? v : 'https://' + v;
+  if (location.protocol === 'https:' && base.startsWith('http://')) {
+    serverErr.textContent = 'La web va por https: el servidor también debe usar https (contenido mixto bloqueado).';
+    serverErr.hidden = false;
+    return;
+  }
+  btnServerSave.disabled = true;
+  const ok = await healthCheck(base, 8000);
+  btnServerSave.disabled = false;
+  if (!ok) {
+    serverErr.textContent = 'No responde /api/health ahí. Revisa la URL y que el servidor esté en marcha.';
+    serverErr.hidden = false;
+    return;
+  }
+  apiBase = base;
+  store.set(LS_API, base);
+  await detectMode();
+  toggleServerPop(false);
+  toast('Servidor conectado ✓');
+});
+btnServerClear.addEventListener('click', async () => {
+  store.del(LS_API);
+  apiBase = '';
+  serverUrl.value = '';
+  await detectMode();
+  toggleServerPop(false);
+  toast('Servidor olvidado');
+});
 urlInput.addEventListener('input', () => {
   setUrlError('');
   hideAlert();
@@ -759,7 +856,7 @@ btnCancel.addEventListener('click', () => {
   if (progressCard.hidden) return; // nada en curso
   clearInterval(pollTimer);
   if (localServer && serverJobId) {
-    fetch(`/api/cancel/${serverJobId}`, { method: 'POST' }).catch(() => {});
+    fetch(api(`/api/cancel/${serverJobId}`), { method: 'POST' }).catch(() => {});
   } else {
     aborter?.abort('cancelled');
   }
@@ -810,4 +907,4 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-detectLocalServer();
+detectMode();

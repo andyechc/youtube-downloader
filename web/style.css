@@ -11,6 +11,7 @@
   --accent-2:#ff6b35;
   --accent-3:#7c3aed;
   --ok:#10b981;
+  --warn:#f59e0b;
   --danger:#ff6b62;
   --radius:22px;
   --radius-sm:14px;
@@ -51,14 +52,33 @@ code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.86em;backgro
 .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);background-size:46px 46px;mask-image:radial-gradient(800px 600px at 50% 20%, black 30%, transparent 75%);opacity:.28}
 
 /* header */
-.header{position:sticky;top:0;z-index:20;backdrop-filter:blur(16px) saturate(1.4);background:rgba(11,11,16,.78);border-bottom:1px solid var(--line)}
-.header-inner{display:flex;align-items:center;justify-content:space-between;padding:12px 0;gap:12px;flex-wrap:wrap}
+.header{position:sticky;top:0;z-index:30;backdrop-filter:blur(18px) saturate(1.5);background:rgba(11,11,16,.78);border-bottom:1px solid transparent}
+.header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,59,48,.45),rgba(124,58,237,.45),transparent)}
+.header-inner{position:relative;display:flex;align-items:center;justify-content:space-between;padding:10px 0;gap:12px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
-.logo{width:40px;height:40px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(135deg,#FF3B30,#FF6B35 55%,#7c3aed);color:#fff;box-shadow:0 10px 30px rgba(255,59,48,.30)}
+.logo{width:40px;height:40px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(135deg,#FF3B30,#FF6B35 55%,#7c3aed);color:#fff;box-shadow:0 10px 30px rgba(255,59,48,.30),0 0 0 1px rgba(255,255,255,.12) inset}
 .brand-text{display:flex;flex-direction:column;line-height:1.05}
 .brand-text strong{font-family:"Space Grotesk",sans-serif;font-size:1.1rem;letter-spacing:-.03em}
-.brand-text strong span{font-weight:500}
-.brand-text small{font-size:.68rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.grad-text{background:linear-gradient(135deg,#ff8a5c,#c86bff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.brand-text small{font-size:.66rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.server-wrap{position:relative}
+.status-pill{display:inline-flex;align-items:center;gap:8px;padding:8px 13px;min-height:38px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid var(--line);color:var(--text);font-weight:700;font-size:.78rem;letter-spacing:.02em;cursor:pointer;transition:.16s}
+.status-pill:hover{background:rgba(255,255,255,.12)}
+.status-pill .pill-dot{width:8px;height:8px;border-radius:50%;background:var(--warn);box-shadow:0 0 0 5px rgba(245,158,11,.15)}
+.status-pill.is-local .pill-dot{background:var(--ok);box-shadow:0 0 0 5px rgba(16,185,129,.15);animation:pulse 1.8s infinite}
+.status-pill.is-remote .pill-dot{background:#7dd3fc;box-shadow:0 0 0 5px rgba(125,211,252,.15);animation:pulse 1.8s infinite}
+.status-pill.is-browser .pill-dot{background:var(--warn);box-shadow:0 0 0 5px rgba(245,158,11,.15)}
+.server-pop{position:absolute;right:0;top:calc(100% + 10px);width:min(320px,86vw);padding:14px;border-radius:16px;background:rgba(18,18,26,.97);border:1px solid var(--line);box-shadow:0 24px 60px rgba(0,0,0,.5);z-index:40}
+.server-pop[hidden]{display:none}
+.server-pop-label{display:block;font-size:.72rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.server-pop-row{display:flex;gap:8px}
+.server-pop-row input{flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.06);color:var(--text);font-size:.85rem;padding:9px 10px;min-height:38px;outline:none}
+.server-pop-row input:focus{border-color:rgba(125,211,252,.5);box-shadow:0 0 0 3px rgba(125,211,252,.12)}
+.server-pop-row .btn{white-space:nowrap}
+.server-pop-hint{margin:10px 0 0;font-size:.74rem;color:var(--muted);line-height:1.5}
+.server-pop-err{margin:8px 0 0;font-size:.78rem;color:#ffc9c5;font-weight:600}
+.server-pop-err[hidden]{display:none}
+#btnServerClear{margin-top:10px}
 
 /* buttons — min 44px targets */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px;min-height:44px;border-radius:999px;border:1px solid transparent;font-weight:700;font-size:.88rem;letter-spacing:-.01em;cursor:pointer;transition:transform .16s,filter .16s,background .16s;text-decoration:none;user-select:none}

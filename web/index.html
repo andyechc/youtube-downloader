@@ -28,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=9" />
+  <link rel="stylesheet" href="style.css?v=11" />
 </head>
 <body>
   <a class="skip" href="#form-card">Saltar al descargador</a>
@@ -47,10 +47,26 @@
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
         </span>
         <span class="brand-text">
-          <strong>YT <span>Downloader</span></strong>
-          <small>100% en tu navegador</small>
+          <strong>YT <span class="grad-text">Downloader</span></strong>
+          <small>Pegar · ver · descargar</small>
         </span>
       </a>
+      <div class="server-wrap">
+        <button class="status-pill is-browser" id="modePill" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="serverPop" title="Dónde se resuelve la descarga">
+          <span class="pill-dot" aria-hidden="true"></span>
+          <span id="modeLabel">Navegador</span>
+        </button>
+        <div class="server-pop" id="serverPop" role="dialog" aria-label="Servidor de descargas" hidden>
+          <label class="server-pop-label" for="serverUrl">Servidor (API)</label>
+          <div class="server-pop-row">
+            <input id="serverUrl" name="server" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://tu-servidor.com" />
+            <button class="btn tiny primary" id="btnServerSave" type="button">Conectar</button>
+          </div>
+          <p class="server-pop-hint">Vacío = automático (local, o navegador si no hay servidor). Requiere https si la web va por https.</p>
+          <p class="server-pop-err" id="serverErr" role="alert" hidden></p>
+          <button class="btn tiny ghost" id="btnServerClear" type="button">Olvidar servidor</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -230,6 +246,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <!-- Bump ?v=N en style.css/app.js con cada cambio: evita JS viejo cacheado -->
-  <script src="app.js?v=10" defer></script>
+  <script src="app.js?v=11" defer></script>
 </body>
 </html>
