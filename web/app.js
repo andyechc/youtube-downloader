@@ -128,6 +128,19 @@ const btnSaveAgain = $('#btnSaveAgain');
 const btnOther = $('#btnOther');
 const plSaveList = $('#plSaveList');
 
+const progSpin = progressCard.querySelector('.spin');
+const SPIN_SVG = progSpin ? progSpin.innerHTML : '';
+function startSpinner() {
+  if (!progSpin) return;
+  progSpin.innerHTML = SPIN_SVG;
+  progSpin.style.animation = '';
+}
+function stopSpinner() {
+  if (!progSpin) return;
+  progSpin.style.animation = 'none';
+  progSpin.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+}
+
 const previewCard = $('#previewCard');
 const pvThumb = $('#pvThumb');
 const pvTitle = $('#pvTitle');
@@ -439,6 +452,7 @@ async function doDownloadBrowser() {
   const filename = current.filename;
   progressCard.hidden = false;
   progDoneBox.hidden = true;
+  startSpinner();
   progressLabel.textContent = 'Descargando…';
   progFile.textContent = filename;
   setProgress(0, 0, null, 0, NaN);
@@ -482,6 +496,7 @@ async function doDownloadBrowser() {
 
     setProgress(100, received, total || received, 0, 0);
     progressLabel.textContent = 'Completado';
+    stopSpinner();
     progEta.textContent = '¡listo!';
     progDoneBox.hidden = false;
     plSaveList.hidden = true;
@@ -489,13 +504,9 @@ async function doDownloadBrowser() {
     showAlert(`Guardado como “${filename}”. Revisa tu carpeta Descargas.`, true);
     toast('¡Descarga completada! ✓', 3200);
   } catch (e) {
-    if (e?.name === 'AbortError' || aborter.signal.aborted) {
-      progressLabel.textContent = 'Cancelado';
-      progEta.textContent = 'cancelado';
-      toast('Descarga cancelada');
-      return;
-    }
+    if (e?.name === 'AbortError' || aborter.signal.aborted) return; // UI ya reseteada por Cancelar
     console.error(e);
+    stopSpinner();
     progressLabel.textContent = 'Error';
     showAlert(`Falló la descarga (${e.message || e}). Vuelve a intentarlo.`);
   } finally {
@@ -565,6 +576,7 @@ async function doServerDownload() {
   plSaveList.hidden = true;
   plSaveList.innerHTML = '';
   btnSaveAgain.style.display = '';
+  startSpinner();
   progressLabel.textContent = 'Descargando…';
   progFile.textContent = current.serverInfo.title || current.pageUrl;
   setProgress(0, 0, null, 0, NaN);
@@ -610,6 +622,7 @@ async function pollServerJob() {
       clearInterval(pollTimer);
       setBusy(false, 'Descargar');
       btnDownload.disabled = false;
+      stopSpinner();
       if (job.status === 'done') {
         const usable = (job.files || []).filter((f) => f);
         if (!usable.length) {
@@ -743,15 +756,23 @@ btnDownload.addEventListener('click', () => {
   else if (current.picked) doDownloadBrowser();
 });
 btnCancel.addEventListener('click', () => {
-  setBusy(false, 'Descargar');
-  btnDownload.disabled = false;
+  if (progressCard.hidden) return; // nada en curso
+  clearInterval(pollTimer);
   if (localServer && serverJobId) {
     fetch(`/api/cancel/${serverJobId}`, { method: 'POST' }).catch(() => {});
-    clearInterval(pollTimer);
-    progressLabel.textContent = 'Cancelado';
-    progEta.textContent = 'cancelado';
-    toast('Descarga cancelada');
-  } else aborter?.abort('cancelled');
+  } else {
+    aborter?.abort('cancelled');
+  }
+  // Estado final explícito: sin barra a medias ni loader girando
+  stopSpinner();
+  setProgress(0, 0, null, 0, NaN);
+  progDone.textContent = '—';
+  progEta.textContent = 'cancelado';
+  progFile.textContent = 'Descarga cancelada por el usuario.';
+  progressLabel.textContent = 'Cancelado';
+  setBusy(false, 'Descargar');
+  btnDownload.disabled = false;
+  toast('Descarga cancelada');
 });
 /* "Guardar archivo" con errores visibles: si el servidor ya entregó y borró
  * (410) o algo falla, se muestra en vez de descargar un JSON misterioso. */
