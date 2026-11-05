@@ -397,7 +397,7 @@ async function doBrowserFlow(videoId) {
       quality, kind,
       duration: fmtDuration(data.duration),
     });
-    await doDownloadBrowser();
+    toast('Vista previa lista — pulsa Descargar ahora ✓');
   } catch (e) {
     console.error(e);
     let videoExists = false;
@@ -433,6 +433,7 @@ async function doDownloadBrowser() {
   hideAlert();
   aborter?.abort();
   aborter = new AbortController();
+  btnDownload.disabled = true;
 
   const streamUrl = current.picked.url;
   const filename = current.filename;
@@ -499,6 +500,7 @@ async function doDownloadBrowser() {
     showAlert(`Falló la descarga (${e.message || e}). Vuelve a intentarlo.`);
   } finally {
     setBusy(false, 'Descargar');
+    btnDownload.disabled = false;
   }
 }
 
@@ -508,6 +510,7 @@ async function doDownloadBrowser() {
 async function doServerFlow(raw) {
   const { quality, kind } = currentSelection();
   setBusy(true, 'Resolviendo…');
+  previewCard.hidden = true;
   progressCard.hidden = true;
   progDoneBox.hidden = true;
   current = null;
@@ -522,7 +525,7 @@ async function doServerFlow(raw) {
     if (!res.ok || !data.ok) throw new Error(data.error || `Error ${res.status}`);
     current = { pageUrl: raw, serverInfo: data.info, kind, quality, filename: null };
     renderServerPreview(data.info, quality, kind, raw);
-    await doServerDownload();
+    toast('Vista previa lista — pulsa Descargar ahora ✓');
   } catch (e) {
     console.error(e);
     showAlert(`No se pudo descargar (${e.message || e}).`);
@@ -556,6 +559,7 @@ function renderServerPreview(info, quality, kind, raw) {
 async function doServerDownload() {
   hideAlert();
   setBusy(true, 'Descargando…');
+  btnDownload.disabled = true;
   progressCard.hidden = false;
   progDoneBox.hidden = true;
   plSaveList.hidden = true;
@@ -581,6 +585,7 @@ async function doServerDownload() {
   } catch (e) {
     showAlert(e.message || 'Error iniciando descarga');
     setBusy(false, 'Descargar');
+    btnDownload.disabled = false;
   }
 }
 
@@ -604,6 +609,7 @@ async function pollServerJob() {
     if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
       clearInterval(pollTimer);
       setBusy(false, 'Descargar');
+      btnDownload.disabled = false;
       if (job.status === 'done') {
         const usable = (job.files || []).filter((f) => f);
         if (!usable.length) {
@@ -737,6 +743,8 @@ btnDownload.addEventListener('click', () => {
   else if (current.picked) doDownloadBrowser();
 });
 btnCancel.addEventListener('click', () => {
+  setBusy(false, 'Descargar');
+  btnDownload.disabled = false;
   if (localServer && serverJobId) {
     fetch(`/api/cancel/${serverJobId}`, { method: 'POST' }).catch(() => {});
     clearInterval(pollTimer);
