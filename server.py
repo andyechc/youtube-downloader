@@ -166,6 +166,9 @@ def human_size(num: int | None) -> str:
 def fmt_duration(secs: int | None) -> str:
     if not secs:
         return "?"
+    m, s = divmod(int(secs), 60)
+    h, m = divmod(m, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
 MIN_SIZE_RATIO = 0.3
@@ -200,9 +203,6 @@ def check_truncation(info, files, quality, audio):
     if exp and exp > 0 and act < MIN_SIZE_RATIO * exp:
         return (act, exp, (info.get("title") or files[0])[:60])
     return None
-    m, s = divmod(int(secs), 60)
-    h, m = divmod(m, 60)
-    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 def find_js_runtime() -> str | None:
     for rt in ("deno", "node", "bun"):
