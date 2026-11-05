@@ -1,13 +1,9 @@
 /* YT Downloader — frontend local (web + server.py opcional).
- * Lógica portada del CLI (youtube-downloader.py):
- *  QUALITIES, resolución de calidad por altura y selección de stream.
- * Sin backend: resolvemos vía API pública Piped y descargamos al navegador
- * con fetch -> Blob -> <a download>. Nada se sube a ningún servidor propio.
+ * Un solo paso: pegar link -> Descargar. Sin previews ni pantallas extra.
  */
 'use strict';
 
 const $ = (s, r = document) => r.querySelector(s);
-const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
 /* ------------------------------------------------------------------ */
 /* Lógica heredada del CLI                                             */
@@ -31,10 +27,6 @@ function qualityCap(q) {
   if (q === 'best') return Number.MAX_SAFE_INTEGER;
   const n = parseInt(q, 10);
   return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
-}
-
-function qualityLabel(q) {
-  return q === 'best' ? 'Máxima' : `${q}p`;
 }
 
 /** Extrae el videoId de URLs youtube.com/watch, youtu.be, /shorts, /embed, music.youtube */
@@ -64,15 +56,6 @@ function extractVideoId(raw) {
   }
 }
 
-function isPlaylistUrl(raw) {
-  try {
-    const u = new URL(raw.trim());
-    return u.searchParams.has('list') && (u.pathname === '/playlist' || u.pathname === '/watch');
-  } catch {
-    return false;
-  }
-}
-
 /** Elige el mejor stream muxed (video+audio) <= cap. Fallback: mejor muxed disponible. */
 function pickVideoStream(videoStreams, quality) {
   const cap = qualityCap(quality);
@@ -86,15 +69,7 @@ function pickVideoStream(videoStreams, quality) {
   });
   // Preferir MP4/H264 para compatibilidad TV/móvil (como el CLI)
   const mp4 = pool.find((s) => /mp4/i.test(s.mimeType || '') || /avc1/i.test(s.codec || ''));
-  return { stream: mp4 || pool[0] || null, onlyVideoFallback: within.length === 0 && muxed.length === 0 };
-}
-
-/** Elige el mejor stream videoOnly como último recurso. */
-function pickVideoOnlyFallback(videoStreams, quality) {
-  const cap = qualityCap(quality);
-  const only = (videoStreams || []).filter((s) => s.videoOnly === true && (s.height || 0) <= cap);
-  only.sort((a, b) => (b.height || 0) - (a.height || 0) || (b.bitrate || 0) - (a.bitrate || 0));
-  return only[0] || null;
+  return mp4 || pool[0] || null;
 }
 
 /** Elige el audio de mayor bitrate (el CLI usa bestaudio; aquí M4A/Opus original). */
@@ -109,31 +84,12 @@ function sanitizeFilename(name, fallback = 'video') {
   return base.replace(/[^\w\d\-_.() \[\]]+/g, '_').replace(/_+/g, '_').replace(/^[_. ]+|[_. ]+$/g, '').slice(0, 120) || fallback;
 }
 
-function fmtDuration(secs) {
-  if (secs == null) return '0:00';
-  const s = Math.floor(secs);
-  const m = Math.floor(s / 60);
-  const h = Math.floor(m / 60);
-  const r = s % 60;
-  const mm = h ? String(m % 60).padStart(2, '0') : String(m);
-  return h ? `${h}:${mm}:${String(r).padStart(2, '0')}` : `${mm}:${String(r).padStart(2, '0')}`;
-}
-
 function fmtBytes(n) {
   if (n == null || Number.isNaN(n)) return '—';
   const units = ['B', 'KB', 'MB', 'GB'];
   let i = 0; let v = n;
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
   return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`;
-}
-
-function fmtViews(n) {
-  if (n == null) return '—';
-  return `${Number(n).toLocaleString('es-ES')} vistas`;
-}
-
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 /* ------------------------------------------------------------------ */
@@ -143,29 +99,10 @@ const form = $('#dl-form');
 const urlInput = $('#urlInput');
 const urlError = $('#url-error');
 const btnClear = $('#btnClear');
-const btnPaste = $('#btnPaste');
-const btnPreview = $('#btnPreview');
-const btnPreviewText = $('#btnPreviewText');
+const btnSubmit = $('#btnSubmit');
+const btnSubmitText = $('#btnSubmitText');
 const alertBox = $('#alertBox');
-const netFallback = $('#netFallback');
-const cliCmd = $('#cliCmd');
-const btnCopyCli = $('#btnCopyCli');
-const kindHint = $('#kind-hint');
 const toastEl = $('#toast');
-
-const previewCard = $('#previewCard');
-const pvThumb = $('#pvThumb');
-const pvTitle = $('#pvTitle');
-const pvChannel = $('#pvChannel');
-const pvViews = $('#pvViews');
-const pvDate = $('#pvDate');
-const pvDuration = $('#pvDuration');
-const pvDesc = $('#pvDesc');
-const pvSize = $('#pvSize');
-const pvTypeBadge = $('#pvTypeBadge');
-const pvQualityBadge = $('#pvQualityBadge');
-const btnOpenYT = $('#btnOpenYT');
-const btnDownload = $('#btnDownload');
 
 const progressCard = $('#progressCard');
 const progressLabel = $('#progressLabel');
@@ -180,18 +117,13 @@ const btnCancel = $('#btnCancel');
 const progDoneBox = $('#progDoneBox');
 const btnSaveAgain = $('#btnSaveAgain');
 const btnOther = $('#btnOther');
-const playlistBox = $('#playlistBox');
-const plList = $('#plList');
-const plTotal = $('#plTotal');
 const plSaveList = $('#plSaveList');
 
-let current = null; // { videoId, pageUrl, streams, picked, kind, quality, filename }
+let current = null; // { videoId?, pageUrl, streams?, picked?, kind, quality, filename?, serverInfo? }
 let aborter = null;
 
-/* Modo servidor local (mejora progresiva): si la web se sirve desde
- * `python server.py` (mismo origen con /api/*), lo usamos para máxima
- * calidad, MP3 320 y playlists. Sin servidor se usa el
- * modo navegador (Piped). */
+/* Modo servidor local: si la web se sirve desde `python server.py`
+ * (mismo origen con /api/*), se usa para máxima calidad y playlists. */
 let localServer = false;
 let serverJobId = null;
 let pollTimer = null;
@@ -235,26 +167,16 @@ function showAlert(msg, ok = false) {
 function hideAlert() {
   alertBox.hidden = true;
   alertBox.textContent = '';
-  netFallback.hidden = true;
-}
-
-function cliCommandFor(pageUrl) {
-  const { quality, kind } = currentSelection();
-  const parts = ['python youtube-downloader.py', `"${pageUrl}"`];
-  if (kind === 'audio') parts.push('-a');
-  else if (quality !== 'best') parts.push('-q', quality);
-  return parts.join(' ');
-}
-
-function showNetFallback(pageUrl) {
-  cliCmd.textContent = cliCommandFor(pageUrl);
-  netFallback.hidden = false;
 }
 function setUrlError(msg) {
   if (!msg) { urlError.hidden = true; urlError.textContent = ''; urlInput.removeAttribute('aria-invalid'); return; }
   urlError.textContent = msg;
   urlError.hidden = false;
   urlInput.setAttribute('aria-invalid', 'true');
+}
+function setBusy(busy, label) {
+  btnSubmit.disabled = busy;
+  btnSubmitText.textContent = label;
 }
 
 /* ------------------------------------------------------------------ */
@@ -295,7 +217,6 @@ function normalizeInvidious(d) {
     videoStreams.push({
       quality: s.qualityLabel || s.quality || 'SD',
       height: parseHeight(s),
-      fps: s.fps || 30,
       mimeType: (s.type || '').split(';')[0],
       codec: codecFromType(s.type),
       bitrate: 0,
@@ -309,7 +230,6 @@ function normalizeInvidious(d) {
       videoStreams.push({
         quality: s.qualityLabel || 'HD',
         height: parseHeight(s),
-        fps: s.fps || 30,
         mimeType: t.split(';')[0],
         codec: s.encoding || codecFromType(t),
         bitrate: s.bitrate || 0,
@@ -334,7 +254,6 @@ function normalizeInvidious(d) {
     duration: d.lengthSeconds,
     thumbnailUrl: thumbs[0]?.url,
     description: d.description,
-    uploadDate: d.published ? new Date(d.published * 1000).toLocaleDateString('es-ES') : '',
     livestream: !!d.liveNow,
     videoStreams,
     audioStreams,
@@ -384,78 +303,31 @@ async function previewOEmbed(pageUrl) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Preview                                                             */
+/* Flujo único: resolver y descargar                                   */
 /* ------------------------------------------------------------------ */
 function currentSelection() {
   return { quality: selectedQuality(), kind: selectedKind() };
 }
 
-function refreshKindHint() {
-  if (localServer) {
-    kindHint.textContent = selectedKind() === 'audio'
-      ? 'El servidor local convierte a MP3 320kbps con ffmpeg.'
-      : 'El servidor local mezcla la máxima calidad disponible.';
-  } else {
-    kindHint.textContent = selectedKind() === 'audio'
-      ? 'Se descarga el audio original en M4A (máxima calidad disponible). ¿Quieres MP3 320? Usa el CLI.'
-      : 'Se descarga video MP4 con audio incluido, listo para TV y móvil.';
-  }
-  pvTypeBadge.textContent = selectedKind() === 'audio' ? 'AUDIO · M4A' : 'VIDEO · MP4';
-  pvQualityBadge.textContent = qualityLabel(selectedQuality());
-  if (current) repick();
-}
-
-function repick() {
-  if (!current || !current.streams) return;
-  const { quality, kind } = currentSelection();
-  const picked = kind === 'audio'
-    ? pickAudioStream(current.streams.audioStreams)
-    : pickVideoStream(current.streams.videoStreams, quality).stream || pickVideoOnlyFallback(current.streams.videoStreams, quality);
-  current.picked = picked;
-  current.quality = quality;
-  current.kind = kind;
-  renderPickedMeta();
-}
-
-function renderPickedMeta() {
-  const { quality, kind } = currentSelection();
-  pvQualityBadge.textContent = qualityLabel(quality);
-  pvTypeBadge.textContent = kind === 'audio' ? 'AUDIO · M4A' : 'VIDEO · MP4';
-  if (!current?.picked) { pvSize.textContent = '—'; return; }
-  const p = current.picked;
-  const bits = [];
-  if (kind === 'video') {
-    bits.push(p.quality || (p.height ? `${p.height}p` : 'MP4'));
-    if (p.videoOnly) bits.push('solo video');
-  } else {
-    bits.push(p.quality || 'audio');
-  }
-  pvSize.textContent = bits.join(' · ');
-}
-
-async function doPreview(event) {
+async function startDownload(event) {
   if (event) event.preventDefault();
   hideAlert();
   setUrlError('');
   const raw = urlInput.value.trim();
 
   if (!raw) { setUrlError('Pega un enlace de YouTube primero.'); urlInput.focus(); return; }
-  if (localServer) return doServerPreview(raw);
+  if (localServer) return doServerFlow(raw);
   const videoId = extractVideoId(raw);
   if (!videoId) {
-    if (isPlaylistUrl(raw)) {
-      setUrlError('Ese enlace es una playlist. La web descarga un video cada vez; para playlists completas usa el CLI.');
-      showAlert('Las playlists completas solo están en el CLI ( Releases → youtube-downloader ). Aquí pega el enlace del video individual.');
-    } else {
-      setUrlError('Ese enlace no parece de YouTube. Usa youtube.com/watch, youtu.be/… o /shorts/….');
-    }
+    setUrlError('Ese enlace no parece un video de YouTube válido.');
     urlInput.focus();
     return;
   }
+  return doBrowserFlow(videoId);
+}
 
-  btnPreview.disabled = true;
-  btnPreviewText.textContent = 'Resolviendo…';
-  previewCard.hidden = true;
+async function doBrowserFlow(videoId) {
+  setBusy(true, 'Resolviendo…');
   progressCard.hidden = true;
   progDoneBox.hidden = true;
   current = null;
@@ -465,12 +337,12 @@ async function doPreview(event) {
     const { data } = await resolveStreams(videoId);
 
     if (data.livestream) throw new Error('Es un directo. Espera a que termine para descargarlo.');
-    if (!data.videoStreams?.length && !data.audioStreams?.length) throw new Error('No se encontraron streams descargables para este video.');
+    if (!data.videoStreams?.length && !data.audioStreams?.length) throw new Error('No se encontraron streams descargables.');
 
     const { quality, kind } = currentSelection();
-    let picked = kind === 'audio'
+    const picked = kind === 'audio'
       ? pickAudioStream(data.audioStreams)
-      : pickVideoStream(data.videoStreams, quality).stream || pickVideoOnlyFallback(data.videoStreams, quality);
+      : pickVideoStream(data.videoStreams, quality);
     if (!picked) throw new Error('No hay streams para esa calidad. Prueba con “Máxima”.');
 
     const ext = kind === 'audio'
@@ -480,48 +352,21 @@ async function doPreview(event) {
       videoId, pageUrl, streams: data, picked, kind, quality,
       filename: `${sanitizeFilename(data.title || videoId)} [${videoId}].${ext}`,
     };
-
-    pvThumb.src = data.thumbnailUrl || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-    pvThumb.alt = `Miniatura: ${data.title || 'video'}`;
-    pvTitle.textContent = data.title || 'Sin título';
-    pvChannel.textContent = data.uploader || 'Canal desconocido';
-    pvViews.textContent = fmtViews(data.views);
-    pvDate.textContent = data.uploadDate || '';
-    pvDuration.textContent = fmtDuration(data.duration);
-    pvDesc.textContent = (data.description || 'Sin descripción').slice(0, 280);
-    btnOpenYT.href = pageUrl;
-    renderPickedMeta();
-    previewCard.hidden = false;
-    previewCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    toast('Preview listo ✓');
+    await doDownloadBrowser();
   } catch (e) {
     console.error(e);
-    // oEmbed (YouTube directo) discrimina: si responde, el video EXISTE
-    // y el fallo es de los resolvedores públicos; si no, el video no existe.
     let videoExists = false;
     try {
-      const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
-      const oe = await previewOEmbed(pageUrl);
-      if (oe?.title) {
-        videoExists = true;
-        pvThumb.src = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-        pvTitle.textContent = oe.title;
-        pvChannel.textContent = oe.author_name || 'YouTube';
-        pvViews.textContent = '—'; pvDate.textContent = '';
-        pvDuration.textContent = '—'; pvDesc.textContent = 'No se pudo resolver la calidad ahora mismo. Reintenta en unos segundos.';
-        btnOpenYT.href = pageUrl;
-        previewCard.hidden = false;
-      }
+      const oe = await previewOEmbed(`https://www.youtube.com/watch?v=${videoId}`);
+      if (oe?.title) videoExists = true;
     } catch { /* noop */ }
     if (e?.providerDown && videoExists) {
-      showAlert('Tu video existe, pero los resolvedores públicos están caídos ahora mismo (son instancias gratuitas y les pasa a menudo). Alternativas de 1 clic abajo.');
-      showNetFallback(`https://www.youtube.com/watch?v=${videoId}`);
+      showAlert('Tu video existe, pero no se pudo resolver ahora mismo. Reintenta en unos segundos.');
     } else {
-      showAlert(`No se pudo resolver ese video (${e.message || e}). Puede ser privado, con restricción de edad o que ya no exista.`);
+      showAlert(`No se pudo descargar (${e.message || e}).`);
     }
   } finally {
-    btnPreview.disabled = false;
-    btnPreviewText.textContent = 'Previsualizar';
+    setBusy(false, 'Descargar');
   }
 }
 
@@ -539,7 +384,7 @@ function setProgress(pct, downloaded, total, speedBps, etaSec) {
 }
 
 async function doDownloadBrowser() {
-  if (!current?.picked) { showAlert('Primero previsualiza el video.'); return; }
+  if (!current?.picked) { showAlert('Primero pega un enlace válido.'); return; }
   hideAlert();
   aborter?.abort();
   aborter = new AbortController();
@@ -551,7 +396,7 @@ async function doDownloadBrowser() {
   progressLabel.textContent = 'Descargando…';
   progFile.textContent = filename;
   setProgress(0, 0, null, 0, NaN);
-  btnDownload.disabled = true;
+  setBusy(true, 'Descargando…');
   progressCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
   const started = performance.now();
@@ -593,6 +438,8 @@ async function doDownloadBrowser() {
     progressLabel.textContent = 'Completado';
     progEta.textContent = '¡listo!';
     progDoneBox.hidden = false;
+    plSaveList.hidden = true;
+    btnSaveAgain.style.display = '';
     showAlert(`Guardado como “${filename}”. Revisa tu carpeta Descargas.`, true);
     toast('¡Descarga completada! ✓', 3200);
   } catch (e) {
@@ -604,121 +451,18 @@ async function doDownloadBrowser() {
     }
     console.error(e);
     progressLabel.textContent = 'Error';
-    showAlert(`Falló la descarga (${e.message || e}). El enlace temporal pudo caducar: vuelve a previsualizar y reintenta. Si persiste, usa el CLI.`);
+    showAlert(`Falló la descarga (${e.message || e}). Vuelve a intentarlo.`);
   } finally {
-    btnDownload.disabled = false;
+    setBusy(false, 'Descargar');
   }
 }
 
 /* ------------------------------------------------------------------ */
-/* Eventos                                                             */
+/* Modo servidor local (server.py)                                     */
 /* ------------------------------------------------------------------ */
-form.addEventListener('submit', doPreview);
-urlInput.addEventListener('input', () => {
-  setUrlError('');
-  hideAlert();
-  btnClear.hidden = urlInput.value.trim().length === 0;
-});
-urlInput.addEventListener('blur', () => {
-  const v = urlInput.value.trim();
-  if (v && !extractVideoId(v) && !isPlaylistUrl(v)) {
-    setUrlError('Revisa el enlace: no parece un video de YouTube válido.');
-  }
-});
-btnClear.addEventListener('click', () => {
-  urlInput.value = '';
-  btnClear.hidden = true;
-  setUrlError('');
-  hideAlert();
-  previewCard.hidden = true;
-  progressCard.hidden = true;
-  playlistBox.hidden = true;
-  plSaveList.hidden = true;
-  plSaveList.innerHTML = '';
-  btnSaveAgain.style.display = '';
-  current = null;
-  urlInput.focus();
-});
-btnPaste.addEventListener('click', async () => {
-  try {
-    const t = await navigator.clipboard.readText();
-    if (t?.trim()) {
-      urlInput.value = t.trim();
-      btnClear.hidden = false;
-      toast('Pegado ✓');
-      doPreview();
-    } else toast('El portapapeles está vacío');
-  } catch {
-    urlInput.focus();
-    toast('Pega con Ctrl+V / ⌘V');
-  }
-});
-form.querySelectorAll('input[name="quality"], input[name="kind"]').forEach((r) => {
-  r.addEventListener('change', refreshKindHint);
-});
-btnCopyCli.addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(cliCmd.textContent);
-    toast('Comando copiado ✓');
-  } catch {
-    toast('Copia el comando manualmente');
-  }
-});
-btnDownload.addEventListener('click', (e) => doDownload(e));
-btnCancel.addEventListener('click', () => {
-  if (localServer && serverJobId) {
-    fetch(`/api/cancel/${serverJobId}`, { method: 'POST' }).catch(() => {});
-    clearInterval(pollTimer);
-    progressLabel.textContent = 'Cancelado';
-    progEta.textContent = 'cancelado';
-    toast('Descarga cancelada');
-  } else aborter?.abort('cancelled');
-});
-/* "Guardar archivo" con errores VISIBLES: si el servidor ya entregó y borró
- * (410) o algo falla, se muestra en vez de descargar un JSON misterioso. */
-btnSaveAgain.addEventListener('click', async (e) => {
-  const href = btnSaveAgain.getAttribute('href') || '';
-  if (!href || href === '#' || href.startsWith('blob:')) return; // nativo
-  e.preventDefault();
-  await saveServerFile(serverJobId, 0, btnSaveAgain.download || 'descarga', btnSaveAgain);
-});
-btnOther.addEventListener('click', () => {
-  progressCard.hidden = true;
-  previewCard.hidden = true;
-  playlistBox.hidden = true;
-  plSaveList.hidden = true;
-  plSaveList.innerHTML = '';
-  btnSaveAgain.style.display = '';
-  urlInput.value = '';
-  btnClear.hidden = true;
-  current = null;
-  urlInput.focus();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-});
-
-// ?url=… para compartir / enlazar directo
-const params = new URLSearchParams(location.search);
-if (params.get('url')) {
-  urlInput.value = params.get('url');
-  btnClear.hidden = false;
-  doPreview();
-}
-
-document.addEventListener('keydown', (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && current && previewCard.hidden === false) {
-    e.preventDefault();
-    doDownload();
-  }
-});
-
-/* ------------------------------------------------------------------ */
-/* Modo servidor local (server.py) — misma API que la UI anterior      */
-/* ------------------------------------------------------------------ */
-async function doServerPreview(raw) {
+async function doServerFlow(raw) {
   const { quality, kind } = currentSelection();
-  btnPreview.disabled = true;
-  btnPreviewText.textContent = 'Resolviendo…';
-  previewCard.hidden = true;
+  setBusy(true, 'Resolviendo…');
   progressCard.hidden = true;
   progDoneBox.hidden = true;
   current = null;
@@ -731,81 +475,105 @@ async function doServerPreview(raw) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || `Error ${res.status}`);
-    const info = data.info;
-
-    if (info.type === 'playlist') {
-      pvThumb.src = info.thumbnail || '';
-      pvTitle.textContent = info.title || 'Playlist';
-      pvChannel.textContent = info.uploader || 'Playlist';
-      pvViews.textContent = `${info.count} videos`;
-      pvDate.textContent = '';
-      pvDuration.textContent = `${info.count} vídeos`;
-      pvDesc.textContent = 'Se descargará completa; luego guardas cada video uno por uno.';
-      pvSize.textContent = info.total_size_str || '—';
-      btnOpenYT.href = raw;
-      renderPlaylistPreview(info.entries || []);
-    } else {
-      pvThumb.src = info.thumbnail || '';
-      pvTitle.textContent = info.title || 'Sin título';
-      pvChannel.textContent = info.channel || info.uploader || '?';
-      pvViews.textContent = info.view_count != null ? fmtViews(info.view_count) : '—';
-      pvDate.textContent = info.upload_date || '';
-      pvDuration.textContent = info.duration_str || fmtDuration(info.duration);
-      pvDesc.textContent = (info.description || 'Sin descripción').slice(0, 280);
-      pvSize.textContent = info.size_str || '—';
-      btnOpenYT.href = info.webpage_url || raw;
-    }
-    pvTypeBadge.textContent = kind === 'audio' ? 'AUDIO · MP3 320' : 'VIDEO · MAX';
-    pvQualityBadge.textContent = qualityLabel(quality);
-    if (info.type !== 'playlist') playlistBox.hidden = true;
-    current = { pageUrl: raw, serverInfo: info, kind, quality, filename: null };
-    previewCard.hidden = false;
-    previewCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    toast('Preview listo ✓');
+    current = { pageUrl: raw, serverInfo: data.info, kind, quality, filename: null };
+    await doServerDownload();
   } catch (e) {
     console.error(e);
-    showAlert(`No se pudo resolver ese enlace (${e.message || e}).`);
+    showAlert(`No se pudo descargar (${e.message || e}).`);
   } finally {
-    btnPreview.disabled = false;
-    btnPreviewText.textContent = 'Previsualizar';
+    setBusy(false, 'Descargar');
   }
 }
 
-async function doDownload(evt) {
-  if (localServer && current?.serverInfo) return doServerDownload();
-  return doDownloadBrowser(evt);
+async function doServerDownload() {
+  hideAlert();
+  setBusy(true, 'Descargando…');
+  progressCard.hidden = false;
+  progDoneBox.hidden = true;
+  plSaveList.hidden = true;
+  plSaveList.innerHTML = '';
+  btnSaveAgain.style.display = '';
+  progressLabel.textContent = 'Descargando…';
+  progFile.textContent = current.serverInfo.title || current.pageUrl;
+  setProgress(0, 0, null, 0, NaN);
+  progressCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  try {
+    const res = await fetch('/api/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: current.pageUrl, quality: current.quality, audio: current.kind === 'audio' }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Error al iniciar descarga');
+    serverJobId = data.jobId;
+    clearInterval(pollTimer);
+    pollTimer = setInterval(pollServerJob, 700);
+    toast('Descarga iniciada ↓');
+  } catch (e) {
+    showAlert(e.message || 'Error iniciando descarga');
+    setBusy(false, 'Descargar');
+  }
 }
 
-function renderPlaylistPreview(entries) {
-  plList.innerHTML = '';
-  plTotal.textContent = `${entries.length} mostrados`;
-  entries.forEach((e) => {
-    const div = document.createElement('div');
-    div.className = 'pl-item';
-    const name = document.createElement('div');
-    name.className = 'pl-title';
-    name.textContent = e.title || 'Sin título';
-    const sub = document.createElement('div');
-    sub.className = 'pl-sub';
-    sub.textContent = `${e.channel || '?'} · ${e.duration_str || '—'} · ${e.size_str || '—'}`;
-    const meta = document.createElement('div');
-    meta.append(name, sub);
-    const th = document.createElement('div');
-    th.className = 'pl-thumb';
-    if (e.thumbnail) {
-      const img = document.createElement('img');
-      img.loading = 'lazy';
-      img.src = e.thumbnail;
-      img.alt = '';
-      th.appendChild(img);
+async function pollServerJob() {
+  try {
+    const res = await fetch(`/api/progress?jobId=${encodeURIComponent(serverJobId)}`);
+    const job = await res.json();
+    if (!res.ok) throw new Error(job.error || 'job no encontrado');
+    setProgress(
+      job.progress || 0,
+      job.downloaded_bytes || 0,
+      job.total_bytes || null,
+      job.speed_raw || 0,
+      job.eta_raw ?? NaN,
+    );
+    progFile.textContent = (job.current_filename || current?.serverInfo?.title || '').split('/').pop();
+    if (job.speed) progSpeed.textContent = job.speed;
+    if (job.eta) progEta.textContent = job.eta;
+    if (job.status === 'processing') progressLabel.textContent = 'Procesando…';
+
+    if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
+      clearInterval(pollTimer);
+      setBusy(false, 'Descargar');
+      if (job.status === 'done') {
+        const usable = (job.files || []).filter((f) => f);
+        if (!usable.length) {
+          progressLabel.textContent = 'Error';
+          progEta.textContent = 'sin archivos';
+          showAlert('Terminó sin archivos que entregar. Reintenta.');
+          return;
+        }
+        setProgress(100, job.total_bytes || job.downloaded_bytes || 0, job.total_bytes || job.downloaded_bytes || null, 0, 0);
+        progressLabel.textContent = 'Completado';
+        progEta.textContent = '¡listo!';
+        progDoneBox.hidden = false;
+        if (current?.serverInfo?.type === 'playlist') {
+          // Playlist: un botón Guardar por video (entrega one-shot por índice).
+          btnSaveAgain.style.display = 'none';
+          const n = renderPlaylistSaveList(serverJobId, job.files);
+          showAlert(`Playlist lista: guarda cada video con su botón (${n} disponibles).`, true);
+        } else {
+          btnSaveAgain.style.display = '';
+          plSaveList.hidden = true;
+          btnSaveAgain.href = `/api/file/${serverJobId}`;
+          const m = /([^/]+)$/.exec(job.files?.[0] || '');
+          btnSaveAgain.download = m ? m[1] : 'descarga';
+          showAlert('Archivo listo. Pulsa «Guardar archivo» para traerlo a tu navegador.', true);
+        }
+        toast('¡Listo para guardar! ↓', 3200);
+      } else if (job.status === 'error') {
+        progressLabel.textContent = 'Error';
+        showAlert(job.error || 'Error en la descarga');
+      } else {
+        progressLabel.textContent = 'Cancelado';
+      }
     }
-    const dur = document.createElement('span');
-    dur.textContent = e.duration_str || '—';
-    th.appendChild(dur);
-    div.append(th, meta);
-    plList.appendChild(div);
-  });
-  playlistBox.hidden = entries.length === 0;
+  } catch (e) {
+    console.error(e);
+    clearInterval(pollTimer);
+    setBusy(false, 'Descargar');
+  }
 }
 
 /* Trae un archivo del job del servidor con errores visibles. */
@@ -867,99 +635,75 @@ function renderPlaylistSaveList(jobId, files) {
   return items.length;
 }
 
-async function doServerDownload() {
+/* ------------------------------------------------------------------ */
+/* Eventos                                                             */
+/* ------------------------------------------------------------------ */
+form.addEventListener('submit', startDownload);
+urlInput.addEventListener('input', () => {
+  setUrlError('');
   hideAlert();
-  btnDownload.disabled = true;
-  progressCard.hidden = false;
-  progDoneBox.hidden = true;
+  btnClear.hidden = urlInput.value.trim().length === 0;
+});
+urlInput.addEventListener('blur', () => {
+  const v = urlInput.value.trim();
+  if (v && !extractVideoId(v)) {
+    setUrlError('Revisa el enlace: no parece un video de YouTube válido.');
+  }
+});
+btnClear.addEventListener('click', () => {
+  urlInput.value = '';
+  btnClear.hidden = true;
+  setUrlError('');
+  hideAlert();
+  progressCard.hidden = true;
   plSaveList.hidden = true;
   plSaveList.innerHTML = '';
   btnSaveAgain.style.display = '';
-  progressLabel.textContent = 'Descargando…';
-  progFile.textContent = current.serverInfo.title || current.pageUrl;
-  setProgress(0, 0, null, 0, NaN);
-  progressCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-  try {
-    const res = await fetch('/api/download', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: current.pageUrl, quality: current.quality, audio: current.kind === 'audio' }),
-    });
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || 'Error al iniciar descarga');
-    serverJobId = data.jobId;
+  current = null;
+  urlInput.focus();
+});
+btnCancel.addEventListener('click', () => {
+  if (localServer && serverJobId) {
+    fetch(`/api/cancel/${serverJobId}`, { method: 'POST' }).catch(() => {});
     clearInterval(pollTimer);
-    pollTimer = setInterval(pollServerJob, 700);
-    toast('Descarga iniciada ↓');
-  } catch (e) {
-    showAlert(e.message || 'Error iniciando descarga');
-    btnDownload.disabled = false;
-  }
+    progressLabel.textContent = 'Cancelado';
+    progEta.textContent = 'cancelado';
+    toast('Descarga cancelada');
+  } else aborter?.abort('cancelled');
+});
+/* "Guardar archivo" con errores visibles: si el servidor ya entregó y borró
+ * (410) o algo falla, se muestra en vez de descargar un JSON misterioso. */
+btnSaveAgain.addEventListener('click', async (e) => {
+  const href = btnSaveAgain.getAttribute('href') || '';
+  if (!href || href === '#' || href.startsWith('blob:')) return; // nativo
+  e.preventDefault();
+  await saveServerFile(serverJobId, 0, btnSaveAgain.download || 'descarga', btnSaveAgain);
+});
+btnOther.addEventListener('click', () => {
+  progressCard.hidden = true;
+  plSaveList.hidden = true;
+  plSaveList.innerHTML = '';
+  btnSaveAgain.style.display = '';
+  urlInput.value = '';
+  btnClear.hidden = true;
+  current = null;
+  urlInput.focus();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+// ?url=… para compartir / enlazar directo
+const params = new URLSearchParams(location.search);
+if (params.get('url')) {
+  urlInput.value = params.get('url');
+  btnClear.hidden = false;
+  startDownload();
 }
 
-async function pollServerJob() {
-  try {
-    const res = await fetch(`/api/progress?jobId=${encodeURIComponent(serverJobId)}`);
-    const job = await res.json();
-    if (!res.ok) throw new Error(job.error || 'job no encontrado');
-    setProgress(
-      job.progress || 0,
-      job.downloaded_bytes || 0,
-      job.total_bytes || null,
-      job.speed_raw || 0,
-      job.eta_raw ?? NaN,
-    );
-    progFile.textContent = (job.current_filename || current?.serverInfo?.title || '').split('/').pop();
-    if (job.speed) progSpeed.textContent = job.speed;
-    if (job.eta) progEta.textContent = job.eta;
-    if (job.status === 'processing') progressLabel.textContent = 'Procesando…';
-
-    if (job.status === 'done' || job.status === 'error' || job.status === 'cancelled') {
-      clearInterval(pollTimer);
-      btnDownload.disabled = false;
-      if (job.status === 'done') {
-        const usable = (job.files || []).filter((f) => f);
-        if (!usable.length) {
-          progressLabel.textContent = 'Error';
-          progEta.textContent = 'sin archivos';
-          showAlert('Terminó sin archivos que entregar (el destino ya existía o falló el merge). Borra duplicados en tu carpeta y reintenta.');
-          return;
-        }
-        setProgress(100, job.total_bytes || job.downloaded_bytes || 0, job.total_bytes || job.downloaded_bytes || null, 0, 0);
-        progressLabel.textContent = 'Completado';
-        progEta.textContent = '¡listo!';
-        progDoneBox.hidden = false;
-        if (current?.serverInfo?.type === 'playlist') {
-          // Playlist: un botón Guardar por video (entrega one-shot por índice).
-          btnSaveAgain.style.display = 'none';
-          const n = renderPlaylistSaveList(serverJobId, job.files);
-          showAlert(`Playlist lista: guarda cada video con su botón (${n} disponibles).`, true);
-        } else {
-          btnSaveAgain.style.display = '';
-          plSaveList.hidden = true;
-          const fileUrl = `/api/file/${serverJobId}`;
-          btnSaveAgain.href = fileUrl;
-          const m = /([^/]+)$/.exec(job.files?.[0] || '');
-          btnSaveAgain.download = m ? m[1] : 'descarga';
-          // Sin auto-clic: la entrega es one-shot y un clic programático que el
-          // navegador bloquee/descarte la consumiría igual (→ 410 fantasma).
-          // El usuario la dispara con gesto explícito en "Guardar archivo".
-          showAlert('Archivo listo. Pulsa «Guardar archivo» para traerlo a tu navegador.', true);
-        }
-        toast('¡Listo para guardar! ↓', 3200);
-      } else if (job.status === 'error') {
-        progressLabel.textContent = 'Error';
-        showAlert(job.error || 'Error en la descarga');
-      } else {
-        progressLabel.textContent = 'Cancelado';
-      }
-    }
-  } catch (e) {
-    console.error(e);
-    clearInterval(pollTimer);
-    btnDownload.disabled = false;
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && current) {
+    e.preventDefault();
+    startDownload();
   }
-}
+});
 
-detectLocalServer().finally(() => refreshKindHint());
+detectLocalServer();
