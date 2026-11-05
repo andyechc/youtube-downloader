@@ -162,6 +162,31 @@
       </form>
     </section>
 
+    <!-- PREVIEW -->
+    <section class="card preview" id="previewCard" aria-labelledby="pvTitle" hidden>
+      <div class="preview-layout">
+        <div class="thumb-wrap">
+          <img id="pvThumb" alt="Miniatura del video" loading="lazy" />
+          <span class="thumb-badge" id="pvDuration">0:00</span>
+        </div>
+        <div class="pv-meta">
+          <div class="pv-top">
+            <span class="badge-soft" id="pvTypeBadge">VIDEO · MP4</span>
+            <span class="pv-size" id="pvSize">—</span>
+            <span class="pv-quality" id="pvQualityBadge">Máxima</span>
+          </div>
+          <h3 id="pvTitle">Título del video</h3>
+          <p class="pv-sub" id="pvLine">—</p>
+          <div class="pv-actions">
+            <button class="btn primary large" id="btnDownload" type="button">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>
+              Descargar ahora
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- PROGRESS -->
     <section class="card progress" id="progressCard" aria-labelledby="progressTitle" hidden>
       <div class="prog-head">
@@ -205,6 +230,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <!-- Bump ?v=N en style.css/app.js con cada cambio: evita JS viejo cacheado -->
-  <script src="app.js?v=7" defer></script>
+  <script src="app.js?v=8" defer></script>
 </body>
 </html>

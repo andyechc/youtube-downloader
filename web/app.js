@@ -84,8 +84,17 @@ function sanitizeFilename(name, fallback = 'video') {
   return base.replace(/[^\w\d\-_.() \[\]]+/g, '_').replace(/_+/g, '_').replace(/^[_. ]+|[_. ]+$/g, '').slice(0, 120) || fallback;
 }
 
-function fmtBytes(n) {
-  if (n == null || Number.isNaN(n)) return '—';
+function fmtDuration(secs) {
+  if (secs == null) return '0:00';
+  const s = Math.floor(secs);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  const r = s % 60;
+  const mm = h ? String(m % 60).padStart(2, '0') : String(m);
+  return h ? `${h}:${mm}:${String(r).padStart(2, '0')}` : `${mm}:${String(r).padStart(2, '0')}`;
+}
+
+function fmtBytes(n) {  if (n == null || Number.isNaN(n)) return '—';
   const units = ['B', 'KB', 'MB', 'GB'];
   let i = 0; let v = n;
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
@@ -118,6 +127,16 @@ const progDoneBox = $('#progDoneBox');
 const btnSaveAgain = $('#btnSaveAgain');
 const btnOther = $('#btnOther');
 const plSaveList = $('#plSaveList');
+
+const previewCard = $('#previewCard');
+const pvThumb = $('#pvThumb');
+const pvTitle = $('#pvTitle');
+const pvLine = $('#pvLine');
+const pvDuration = $('#pvDuration');
+const pvSize = $('#pvSize');
+const pvTypeBadge = $('#pvTypeBadge');
+const pvQualityBadge = $('#pvQualityBadge');
+const btnDownload = $('#btnDownload');
 
 let current = null; // { videoId?, pageUrl, streams?, picked?, kind, quality, filename?, serverInfo? }
 let aborter = null;
@@ -309,6 +328,23 @@ function currentSelection() {
   return { quality: selectedQuality(), kind: selectedKind() };
 }
 
+function qualityName(q) {
+  return q === 'best' ? 'Máxima' : `${q}p`;
+}
+
+function renderPreviewCard({ thumb, title, line, size, quality, kind, duration }) {
+  if (thumb) pvThumb.src = thumb;
+  else pvThumb.removeAttribute('src');
+  pvTitle.textContent = title || 'Sin título';
+  pvLine.textContent = line || '—';
+  pvSize.textContent = size || '—';
+  pvQualityBadge.textContent = qualityName(quality);
+  pvTypeBadge.textContent = kind === 'audio' ? 'AUDIO' : 'VIDEO';
+  pvDuration.textContent = duration || '0:00';
+  previewCard.hidden = false;
+  previewCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 async function startDownload(event) {
   if (event) event.preventDefault();
   hideAlert();
@@ -328,6 +364,7 @@ async function startDownload(event) {
 
 async function doBrowserFlow(videoId) {
   setBusy(true, 'Resolviendo…');
+  previewCard.hidden = true;
   progressCard.hidden = true;
   progDoneBox.hidden = true;
   current = null;
@@ -352,6 +389,14 @@ async function doBrowserFlow(videoId) {
       videoId, pageUrl, streams: data, picked, kind, quality,
       filename: `${sanitizeFilename(data.title || videoId)} [${videoId}].${ext}`,
     };
+    renderPreviewCard({
+      thumb: data.thumbnailUrl || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      title: data.title,
+      line: data.uploader || 'YouTube',
+      size: picked.quality || (picked.height ? `${picked.height}p` : '—'),
+      quality, kind,
+      duration: fmtDuration(data.duration),
+    });
     await doDownloadBrowser();
   } catch (e) {
     console.error(e);
@@ -476,6 +521,7 @@ async function doServerFlow(raw) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || `Error ${res.status}`);
     current = { pageUrl: raw, serverInfo: data.info, kind, quality, filename: null };
+    renderServerPreview(data.info, quality, kind, raw);
     await doServerDownload();
   } catch (e) {
     console.error(e);
@@ -483,6 +529,28 @@ async function doServerFlow(raw) {
   } finally {
     setBusy(false, 'Descargar');
   }
+}
+
+function renderServerPreview(info, quality, kind, raw) {
+  if (info.type === 'playlist') {
+    renderPreviewCard({
+      thumb: info.thumbnail || '',
+      title: info.title || 'Playlist',
+      line: `${info.count} videos`,
+      size: info.total_size_str || '—',
+      quality, kind,
+      duration: `${info.count} vídeos`,
+    });
+    return;
+  }
+  renderPreviewCard({
+    thumb: info.thumbnail || '',
+    title: info.title,
+    line: [info.channel || info.uploader, info.upload_date].filter(Boolean).join(' · ') || 'YouTube',
+    size: info.size_str,
+    quality, kind,
+    duration: info.duration_str,
+  });
 }
 
 async function doServerDownload() {
@@ -655,12 +723,18 @@ btnClear.addEventListener('click', () => {
   btnClear.hidden = true;
   setUrlError('');
   hideAlert();
+  previewCard.hidden = true;
   progressCard.hidden = true;
   plSaveList.hidden = true;
   plSaveList.innerHTML = '';
   btnSaveAgain.style.display = '';
   current = null;
   urlInput.focus();
+});
+btnDownload.addEventListener('click', () => {
+  if (!current) return;
+  if (localServer && current.serverInfo) doServerDownload();
+  else if (current.picked) doDownloadBrowser();
 });
 btnCancel.addEventListener('click', () => {
   if (localServer && serverJobId) {
@@ -680,6 +754,7 @@ btnSaveAgain.addEventListener('click', async (e) => {
   await saveServerFile(serverJobId, 0, btnSaveAgain.download || 'descarga', btnSaveAgain);
 });
 btnOther.addEventListener('click', () => {
+  previewCard.hidden = true;
   progressCard.hidden = true;
   plSaveList.hidden = true;
   plSaveList.innerHTML = '';
